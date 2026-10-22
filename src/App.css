@@ -114,3 +114,12 @@ button {
   color: var(--muted);
   padding: 2px 8px;
 }
+
+.answer {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+button:disabled {
+  opacity: 0.6;
+}

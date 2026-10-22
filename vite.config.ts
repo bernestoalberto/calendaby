@@ -26,6 +26,12 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    // Local dev: send /api/agent straight to the agent running with `npm run agent` on port 8080.
+    proxy: {
+      '/api/agent': { target: 'http://localhost:8080', rewrite: () => '/invocations' },
+    },
+  },
   test: {
     environment: 'node',
   },

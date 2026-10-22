@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RuleCaptureAgent } from './agents/capture'
 import { buildHandoff, handoffText } from './agents/handoff'
+import { callAgent, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import type { BabyEvent } from './domain/events'
 import { DuplicateEventError, LocalEventStore } from './domain/store'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
 const store = new LocalEventStore()
-const capture = new RuleCaptureAgent()
+const capture = new HybridCaptureAgent()
 const CAREGIVER_KEY = 'calendaby.caregiver'
 
 function describe(e: BabyEvent): string {
@@ -39,6 +39,9 @@ export default function App() {
   const [caregiver, setCaregiver] = useState(readCaregiver)
   const [messages, setMessages] = useState<string[]>([])
   const [showHandoff, setShowHandoff] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [asking, setAsking] = useState(false)
   const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
 
   // Ticks each minute so "asleep for 40 min" stays current without a reload.
@@ -61,12 +64,34 @@ export default function App() {
         notes.push(err instanceof DuplicateEventError ? err.message : `Skipped a ${d.kind}: ${String(err)}`)
       }
     }
-    for (const u of unsure) notes.push(`Didn't understand "${u}"`)
+    for (const u of unsure) notes.push(`Not logged: ${u}`)
     setEvents(store.list())
     setNow(Date.now())
     setMessages(notes)
     // Keep only what still needs the parent's attention in the box.
     setText(unsure.join(', '))
+  }
+
+  async function ask() {
+    if (!question.trim()) return
+    setAsking(true)
+    try {
+      const res = await callAgent({ mode: 'chat', prompt: question, now: isoWithOffset(new Date()), events })
+      for (const d of res.drafts) {
+        try {
+          store.append(d, caregiver)
+        } catch {
+          // Already logged; the reply still answers the question.
+        }
+      }
+      setEvents(store.list())
+      setAnswer(res.reply)
+      setQuestion('')
+    } catch {
+      setAnswer('The assistant is offline right now. Logging still works.')
+    } finally {
+      setAsking(false)
+    }
   }
 
   function changeCaregiver(name: string) {
@@ -127,6 +152,22 @@ export default function App() {
             {m}
           </p>
         ))}
+      </form>
+
+      <form
+        className="capture"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void ask()
+        }}
+      >
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask: how much has she eaten today?" />
+        <div className="actions">
+          <button type="submit" disabled={asking}>
+            {asking ? 'Thinking...' : 'Ask'}
+          </button>
+        </div>
+        {answer && <p className="answer">{answer}</p>}
       </form>
 
       <section>

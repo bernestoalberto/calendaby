@@ -62,3 +62,14 @@ export type DraftEvent = BabyEvent extends infer E
     ? Omit<E, 'id' | 'loggedBy'>
     : never
   : never
+
+const omitStored = { id: true, loggedBy: true } as const
+
+/** Runtime check for events proposed outside the app (e.g. by the agent) before they reach the store. */
+export const DraftEventSchema = z.discriminatedUnion('kind', [
+  FeedEvent.omit(omitStored),
+  SleepEvent.omit(omitStored),
+  DiaperEvent.omit(omitStored),
+  MedEvent.omit(omitStored),
+  NoteEvent.omit(omitStored),
+])

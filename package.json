@@ -11,9 +11,13 @@
     "cap:android": "npm run cap:sync && cap open android",
     "cap:ios": "npm run cap:sync && cap open ios",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "agent": "cd agent && uv run --env-file .env calendaby_agent.py",
+    "agent:test": "cd agent && uv run pytest -q",
+    "check": "npm run lint && npm run build && npm test && npm run agent:test"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.1156.0",
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
@@ -26,6 +30,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vercel/node": "^27.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",

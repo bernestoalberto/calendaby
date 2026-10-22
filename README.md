@@ -4,11 +4,12 @@ A baby tracker for dads and co-parents. It logs from one sentence, catches dupli
 
 ## Run it
 
+See [docs/STATUS.md](docs/STATUS.md) for local setup on Windows, macOS or Linux, with and without the AI assistant.
+
 ```bash
 npm install
 npm run dev      # PWA at http://localhost:5173
-npm test         # vitest
-npm run build    # typecheck + production build in dist/ (with service worker)
+npm run check    # lint, build, tests, agent tests
 ```
 
 ## Native apps
@@ -30,9 +31,13 @@ npm run cap:ios       # build, sync and open Xcode
 | `src/domain/store.ts` | Append-only event store; validates and rejects duplicates for every writer; `LocalEventStore` persists offline |
 | `src/agents/capture.ts` | Capture agent: turns "fed 120 ml at 3, she's down now" into events and returns what it did not understand |
 | `src/agents/handoff.ts` | Handoff agent: the 30-second brief for the incoming caregiver |
+| `src/agents/remote.ts` | Hybrid capture: rules first, the agent only for leftovers |
 | `src/useSpeech.ts` | Voice input through the Web Speech API |
+| `api/agent.ts` | Vercel function that invokes the agent on AgentCore |
+| `agent/` | Strands agent for AgentCore: capture and chat modes, typed tools |
+| `evals/` | Capture eval set shared by the rules test and the live agent |
 
-The capture agent is rule-based so it works offline and costs nothing. `CaptureAgent` is an interface, so an LLM-backed agent can replace it without touching the UI.
+Logging works offline with the rules parser. Only what it can't parse goes to the agent, so most entries cost nothing. Design notes are in `docs/`.
 
 ## Roadmap
 

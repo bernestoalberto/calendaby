@@ -1,0 +1,17 @@
+{
+  "now": "2026-10-22T16:10:00",
+  "cases": [
+    { "text": "fed 120 ml at 3", "expect": [{ "kind": "feed", "method": "bottle", "amountMl": 120, "at": "15:00" }] },
+    { "text": "bottle 4oz 20 min ago", "expect": [{ "kind": "feed", "method": "bottle", "amountMl": 118, "at": "15:50" }] },
+    { "text": "nursed left side", "expect": [{ "kind": "feed", "method": "breast", "side": "left", "at": "16:10" }] },
+    { "text": "she's down now", "expect": [{ "kind": "sleep", "phase": "start", "at": "16:10" }] },
+    { "text": "woke at 2:30, wet diaper", "expect": [{ "kind": "sleep", "phase": "end", "at": "14:30" }, { "kind": "diaper", "contents": "wet", "at": "14:30" }] },
+    { "text": "wet and dirty diaper", "expect": [{ "kind": "diaper", "contents": "both", "at": "16:10" }] },
+    { "text": "gave tylenol 2.5 ml at 1pm", "expect": [{ "kind": "med", "name": "tylenol", "doseMl": 2.5, "at": "13:00" }] },
+    { "text": "ate some sweet potato puree", "expect": [{ "kind": "feed", "method": "solids", "at": "16:10" }] },
+    { "text": "grandma visited", "expect": [{ "kind": "note", "at": "16:10" }] },
+    { "text": "she drank half the bottle, about 60", "expect": [{ "kind": "feed", "method": "bottle", "amountMl": 60, "at": "16:10" }] },
+    { "text": "changed her, just pee", "expect": [{ "kind": "diaper", "contents": "wet", "at": "16:10" }] },
+    { "text": "took a 40 minute nap that ended 10 min ago", "expect": [{ "kind": "sleep", "phase": "start", "at": "15:20" }, { "kind": "sleep", "phase": "end", "at": "16:00" }] }
+  ]
+}

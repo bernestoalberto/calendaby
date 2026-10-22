@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["calendaby_agent", "context", "tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project]
+name = "calendaby-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "bedrock-agentcore>=0.1.3",
+    "pydantic>=2.11.9",
+    "strands-agents>=1.8.0",
+]
+
+[dependency-groups]
+dev = [
+    "bedrock-agentcore-starter-toolkit>=0.1.10",
+    "pytest>=8",
+]
