@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { dailyStats, napForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
+import { deduceInsights, feedForecast, sleepForecast } from '../domain/predictions'
 import { formatMinutes } from '../domain/summary'
 import { Badge, Segmented } from './controls'
 import { BottleIcon, CheckIcon, MoonIcon, ShareIcon, SparkIcon } from './icons'
@@ -20,6 +21,9 @@ export function Analytics({ events, now, unit, baby, onShare }: Props) {
   const [range, setRange] = useState<'7' | '30'>('7')
   const days = useMemo(() => dailyStats(events, Number(range), now), [events, range, now])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
+  const sleep = useMemo(() => sleepForecast(events, now), [events, now])
+  const feed = useMemo(() => feedForecast(events, now), [events, now])
+  const insights = useMemo(() => deduceInsights(events, baby, now), [events, baby, now])
   const logged = days.filter((d) => d.nightMin + d.dayMin + d.feeds + d.wet + d.dirty > 0)
   const nightAvg = avg(logged.map((d) => d.nightMin))
   const dayAvg = avg(logged.map((d) => d.dayMin))
@@ -73,17 +77,27 @@ export function Analytics({ events, now, unit, baby, onShare }: Props) {
         ]}
       />
 
-      {forecast && (
+      {(forecast || feed || sleep.usualNapMin) && (
         <section className="card insight">
           <div className="card-head">
             <h3>
-              <SparkIcon width={20} height={20} /> Wake Window
+              <SparkIcon width={20} height={20} /> Deduced Rhythm &amp; Advice
             </h3>
-            <Badge tone="lilac">Last 3 days</Badge>
+            <Badge tone="lilac">Past records</Badge>
           </div>
-          <p>
-            {baby} has been staying awake about <b>{formatMinutes(forecast.wakeWindowMin)}</b> between sleeps. The Today screen uses this to estimate the next nap.
-          </p>
+          {forecast && (
+            <p>
+              {baby} stays awake about <b>{formatMinutes(forecast.wakeWindowMin)}</b> between sleeps
+              {sleep.usualNapMin ? <> and naps for about <b>{formatMinutes(sleep.usualNapMin)}</b></> : null}.
+            </p>
+          )}
+          {feed && (
+            <p>
+              Daytime feeds happen every <b>{formatMinutes(feed.intervalMin)}</b>
+              {feed.usualBottleMl ? <> (typical bottle: <b>{formatAmount(feed.usualBottleMl, unit)}</b>)</> : null}.
+            </p>
+          )}
+          {insights[0] && <p className="muted">{insights[0].advice}</p>}
         </section>
       )}
 

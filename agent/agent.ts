@@ -4,7 +4,9 @@ import { z } from 'zod'
 import { operations } from '../backend/operations.js'
 import type { Db } from '../backend/db.js'
 import type { AgentRequest, AgentResponse } from '../src/agents/remote.js'
+import { dailyStats } from '../src/domain/analytics.js'
 import { DraftEventSchema, type DraftEvent } from '../src/domain/events.js'
+import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from '../src/domain/predictions.js'
 
 export function apiKey(): string | undefined {
   return process.env.OPEN_ROUTER_API || process.env.OPENROUTER_API_KEY
@@ -38,9 +40,9 @@ Reply with one short sentence confirming what you logged.
 ${SAFETY}`
 
 const CHAT = (now: string) => `
-You help a parent, often a dad mid-shift, with questions about their baby. The current local time is ${now}.
-For questions about their baby's day, use listEvents first and cite times and amounts.
-For general baby-care questions (sleep, feeding, routines, development), answer from common guidance in a few sentences.
+You help a parent, often a dad mid-shift, with questions, predictions, and advice about their baby. The current local time is ${now}.
+For questions about their baby's day, schedule, predictions, or advice, call getPredictions and listEvents first, and cite specific times, amounts, and patterns from their logs.
+Deduce patterns from the baby's own history (wake windows, nap lengths, feeding intervals, usual bottle volume or next nursing side, bedtime sweet-spot) and give brief, practical, supportive advice.
 Be brief and kind. Don't diagnose; for anything worrying, say what to watch for and suggest calling the pediatrician.
 If the parent tells you something that happened, log it with record_events.
 ${SAFETY}`
@@ -113,13 +115,56 @@ export async function runAgent(req: AgentRequest, db: Db, model: LanguageModel =
         .run(db, { since: Math.floor(session.now.getTime() - hours * 3_600_000) })
         .map((e) => ({ ...e, at: localTime(e.at, req.now) })),
   })
+  const getPredictions = tool({
+    description:
+      "Compute deduced rhythm predictions (next nap, usual nap length, expected wake time, next feed, usual bottle ml, next breast side, diaper cadence, bedtime sweet-spot), 7-day daily stats, and smart advice from the baby's past logs.",
+    inputSchema: z.object({ babyName: z.string().optional() }),
+    execute: async ({ babyName }) => {
+      const all = operations.listEvents.run(db, { since: Math.floor(session.now.getTime() - 7 * 24 * 3_600_000) })
+      const nowMs = session.now.getTime()
+      const sleep = sleepForecast(all, nowMs)
+      const feed = feedForecast(all, nowMs)
+      const diaper = diaperForecast(all, nowMs)
+      return {
+        sleep: {
+          wakeWindowMin: sleep.nap?.wakeWindowMin,
+          awakeSince: sleep.nap?.awakeSince ? localTime(sleep.nap.awakeSince, req.now) : undefined,
+          nextNapAt: sleep.nap?.nextNapAt ? localTime(sleep.nap.nextNapAt, req.now) : undefined,
+          usualNapMin: sleep.usualNapMin,
+          expectedWakeAt: sleep.expectedWakeAt ? localTime(sleep.expectedWakeAt, req.now) : undefined,
+          usualBedtimeAt: sleep.usualBedtimeAt ? localTime(sleep.usualBedtimeAt, req.now) : undefined,
+        },
+        feed: feed
+          ? {
+              intervalMin: feed.intervalMin,
+              lastFeedAt: localTime(feed.lastFeedAt, req.now),
+              nextFeedAt: localTime(feed.nextFeedAt, req.now),
+              usualBottleMl: feed.usualBottleMl,
+              nextBreastSide: feed.nextBreastSide,
+            }
+          : undefined,
+        diaper: diaper
+          ? {
+              intervalMin: diaper.intervalMin,
+              lastDiaperAt: localTime(diaper.lastDiaperAt, req.now),
+              nextCheckAt: localTime(diaper.nextCheckAt, req.now),
+            }
+          : undefined,
+        insights: deduceInsights(all, babyName || 'Baby', nowMs),
+        sevenDayStats: dailyStats(all, 7, nowMs),
+      }
+    },
+  })
 
   const result = await generateText({
     model,
     reasoning: 'low',
     system: (req.mode === 'chat' ? CHAT : CAPTURE)(req.now),
     prompt: req.prompt,
-    tools: req.mode === 'chat' ? { listEvents, record_events: recordEvents } : { record_events: recordEvents, ask_parent: askParent },
+    tools:
+      req.mode === 'chat'
+        ? { getPredictions, listEvents, record_events: recordEvents }
+        : { record_events: recordEvents, ask_parent: askParent },
     stopWhen: isStepCount(req.mode === 'chat' ? 6 : 4),
   })
 

@@ -18,10 +18,10 @@ export function Agent({ baby, chat, busy, online, onSend }: Props) {
   const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
   const end = useRef<HTMLDivElement>(null)
   const suggestions = [
-    `How long did ${baby} nap today?`,
-    `How much has ${baby} eaten today?`,
-    'How many wet diapers a day is normal?',
-    'Tips for a smoother bedtime?',
+    `Predict the rest of ${baby}'s day and advise me`,
+    `Analyze ${baby}'s sleep & feeding patterns`,
+    `How much has ${baby} eaten and slept today?`,
+    'When should bedtime be tonight based on recent logs?',
   ]
 
   useEffect(() => {

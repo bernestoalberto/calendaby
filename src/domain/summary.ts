@@ -1,4 +1,4 @@
-import type { BabyEvent } from './events'
+import type { BabyEvent } from './events.js'
 
 export interface DaySummary {
   feeds: number

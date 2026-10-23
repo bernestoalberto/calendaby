@@ -2,11 +2,11 @@
 
 ## Built
 
-- PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input, and on-device nap notifications (15 min before predicted nap and at nap time).
+- PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input, smart rhythm predictions & advice (`src/domain/predictions.ts`), and on-device smart notifications (nap wind-down, nap sweet-spot, expected wake-up, upcoming feed, and diaper check).
 - Capacitor Android and iOS projects generated (`android/` and `ios/`, synced with `npm run cap:sync`); CI builds `calendaby-debug-apk`.
 - Hybrid capture: the rules parser handles what it can on the phone; leftovers go to the agent.
 - `backend/`: Hono routes on SQLite (`node:sqlite`), one POST route per operationId (`recordEvents`, `listEvents`).
-- `agent/agent.ts`: capture and chat modes. `listEvents` is a backend operation used as a tool. Each agent call first syncs the app's events into the backend.
+- `agent/agent.ts`: capture and chat modes. `listEvents` and `getPredictions` (deduced sleep, feed, diaper, and 7-day trend insights) are tools available to the chat agent. Each agent call first syncs the app's events into the backend.
 - Model from `MODEL_NAME`: OpenRouter, default `openai/gpt-6-luna`.
 - Husky pre-commit runs `npm run check` (lint, build, tests including a dev-server smoke test).
 - `agent/*.py`, `agent/tests` and `agent/uv.lock` are the old Python agent and can be deleted.

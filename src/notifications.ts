@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { NAP_DUE_ID, NAP_SOON_ID, type NapAlert } from './domain/notifications'
+import { ALL_ALERT_IDS, type NapAlert } from './domain/notifications'
 
 export type NotificationAccess = 'granted' | 'denied' | 'prompt' | 'unsupported'
 
@@ -59,7 +59,7 @@ export async function syncNapNotifications(enabled: boolean, alerts: NapAlert[])
   clearWebTimers()
   if (Capacitor.isNativePlatform()) {
     try {
-      await LocalNotifications.cancel({ notifications: [{ id: NAP_SOON_ID }, { id: NAP_DUE_ID }] })
+      await LocalNotifications.cancel({ notifications: ALL_ALERT_IDS.map((id) => ({ id })) })
       if (!enabled || alerts.length === 0) return
       const { display } = await LocalNotifications.checkPermissions()
       if (display !== 'granted') return
@@ -91,8 +91,8 @@ export async function syncNapNotifications(enabled: boolean, alerts: NapAlert[])
 export async function sendTestNotification(baby: string): Promise<boolean> {
   const access = await requestNotificationAccess()
   if (access !== 'granted') return false
-  const title = `${baby}: nap reminders are on`
-  const body = `Calendaby will notify you 15 minutes before ${baby}'s predicted nap and when nap time arrives.`
+  const title = `${baby}: smart reminders are on`
+  const body = `Calendaby will alert you for ${baby}'s predicted naps, wake-ups, feeds, and diaper checks.`
 
   if (Capacitor.isNativePlatform()) {
     await LocalNotifications.schedule({

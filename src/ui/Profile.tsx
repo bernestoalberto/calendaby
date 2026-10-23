@@ -63,7 +63,7 @@ export function Profile(p: Props) {
       <section className="card">
         <div className="card-head">
           <h3>
-            <MoonIcon width={18} height={18} /> Nap Reminders
+            <MoonIcon width={18} height={18} /> Smart Reminders
           </h3>
           <Badge tone={p.reminders && p.notifAccess === 'granted' ? 'sage' : 'oat'}>
             {p.notifAccess === 'unsupported'
@@ -76,7 +76,7 @@ export function Profile(p: Props) {
           </Badge>
         </div>
         <p className="muted">
-          Notifies you 15 minutes before {p.baby}'s predicted nap and when nap time arrives.
+          Notifies you for {p.baby}'s predicted naps (15m wind-down &amp; due time), expected wake-ups, upcoming feeds, and diaper checks deduced from your logs.
           {p.notifAccess === 'denied' ? ' Allow notifications in your device or browser settings to turn this on.' : ''}
         </p>
         <div className="card-foot">
@@ -86,7 +86,7 @@ export function Profile(p: Props) {
             disabled={p.notifAccess === 'unsupported'}
             onClick={p.onToggleReminders}
           >
-            {p.reminders ? 'Turn off reminders' : 'Enable nap reminders'}
+            {p.reminders ? 'Turn off reminders' : 'Enable smart reminders'}
           </button>
           {p.reminders && p.notifAccess === 'granted' && (
             <button type="button" className="link strong" onClick={p.onTestReminder}>

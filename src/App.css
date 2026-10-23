@@ -1436,6 +1436,18 @@ main {
   color: var(--primary);
 }
 
+.insight-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.insight-row p {
+  font-size: 14px;
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

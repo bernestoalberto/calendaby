@@ -1,6 +1,7 @@
 import type { FormEvent, ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
+import type { SmartInsight } from '../domain/predictions'
 import type { DaySummary, SleepSession } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import type { HandoffBrief } from '../agents/handoff'
@@ -38,6 +39,7 @@ interface Props {
   napsToday: number
   day: DaySummary
   forecast?: NapForecast
+  insights: SmartInsight[]
   lastFeed?: BabyEvent
   lastDiaper?: BabyEvent
   lastMed?: BabyEvent
@@ -50,7 +52,7 @@ interface Props {
   onQuick: (k: QuickKind) => void
   onFullStats: () => void
   onShareHandoff: () => void
-  onAsk: () => void
+  onAsk: (prompt?: string) => void
 }
 
 export function Today(p: Props) {
@@ -68,6 +70,40 @@ export function Today(p: Props) {
       </div>
 
       <NapCard {...p} />
+
+      {p.insights.length > 0 && (
+        <section className="card insight">
+          <div className="card-head">
+            <h3>
+              <SparkIcon width={20} height={20} /> Smart Predictions &amp; Advice
+            </h3>
+            <Badge tone="lilac">Live rhythm</Badge>
+          </div>
+          <div className="stack">
+            {p.insights.map((item) => (
+              <div key={item.id} className="insight-row">
+                <div className="card-head">
+                  <b>{item.title}</b>
+                  <Badge tone={item.tone}>{item.kind}</Badge>
+                </div>
+                <p className="muted">{item.prediction}</p>
+                <p>{item.advice}</p>
+              </div>
+            ))}
+          </div>
+          <div className="tip-actions">
+            <button
+              type="button"
+              className="link strong"
+              onClick={() =>
+                p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
+              }
+            >
+              <SparkIcon width={16} height={16} /> Ask AI coach for deeper advice
+            </button>
+          </div>
+        </section>
+      )}
 
       <section>
         <div className="section-head">
@@ -247,7 +283,7 @@ export function Today(p: Props) {
             <button type="button" className="link strong" onClick={p.onShareHandoff}>
               <ShareIcon width={16} height={16} /> Share handoff
             </button>
-            <button type="button" className="link muted" onClick={p.onAsk}>
+            <button type="button" className="link muted" onClick={() => p.onAsk()}>
               Ask the agent
             </button>
           </div>

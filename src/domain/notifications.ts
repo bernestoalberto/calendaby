@@ -1,5 +1,7 @@
-import type { NapForecast } from './analytics.js'
-import { formatMinutes } from './summary.js'
+import { NIGHT_END_HOUR, NIGHT_START_HOUR, type NapForecast } from './analytics.js'
+import type { BabyEvent } from './events.js'
+import { diaperForecast, feedForecast, sleepForecast } from './predictions.js'
+import { formatMinutes, sleepSessions } from './summary.js'
 
 export interface NapAlert {
   id: number
@@ -10,10 +12,19 @@ export interface NapAlert {
 
 export const NAP_SOON_ID = 101
 export const NAP_DUE_ID = 102
+export const WAKE_SOON_ID = 103
+export const FEED_DUE_ID = 104
+export const DIAPER_CHECK_ID = 105
+export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID] as const
 export const NAP_LEAD_MS = 15 * 60_000
 
 function clockText(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function isDaytime(ms: number): boolean {
+  const h = new Date(ms).getHours()
+  return h >= NIGHT_END_HOUR && h <= NIGHT_START_HOUR
 }
 
 /**
@@ -46,3 +57,53 @@ export function napAlerts(baby: string, forecast: NapForecast | undefined, aslee
   return out
 }
 
+/**
+ * Smart agent notifications deduced from the baby's own sleep, feed, and diaper history:
+ * - Nap wind-down (15m early) & nap sweet-spot
+ * - Expected wake-up time when napping
+ * - Next predicted feed (with usual bottle amount or next nursing side)
+ * - Next diaper check reminder
+ */
+export function smartAlerts(baby: string, events: BabyEvent[], now: number): NapAlert[] {
+  const sessions = sleepSessions(events)
+  const currentSleep = sessions.at(-1)
+  const asleep = currentSleep !== undefined && currentSleep.end === undefined
+  const sleep = sleepForecast(events, now)
+  const out = napAlerts(baby, sleep.nap, asleep, now)
+
+  if (asleep && sleep.expectedWakeAt !== undefined && sleep.usualNapMin !== undefined && sleep.expectedWakeAt > now) {
+    out.push({
+      id: WAKE_SOON_ID,
+      at: sleep.expectedWakeAt,
+      title: `${baby}: likely waking soon`,
+      body: `${baby}'s daytime naps average ${formatMinutes(sleep.usualNapMin)}. Good window to prep the next feed.`,
+    })
+  }
+
+  const feed = feedForecast(events, now)
+  if (feed && feed.nextFeedAt > now && isDaytime(feed.nextFeedAt)) {
+    const tip = feed.nextBreastSide
+      ? ` Next nursing side: ${feed.nextBreastSide}.`
+      : feed.usualBottleMl
+        ? ` Usual bottle: ~${feed.usualBottleMl} ml (${(feed.usualBottleMl / 29.5735).toFixed(1)} oz).`
+        : ''
+    out.push({
+      id: FEED_DUE_ID,
+      at: feed.nextFeedAt,
+      title: `${baby}: feed window open`,
+      body: `${baby} usually feeds every ${formatMinutes(feed.intervalMin)}.${tip}`,
+    })
+  }
+
+  const diaper = diaperForecast(events, now)
+  if (!asleep && diaper && diaper.nextCheckAt > now && isDaytime(diaper.nextCheckAt)) {
+    out.push({
+      id: DIAPER_CHECK_ID,
+      at: diaper.nextCheckAt,
+      title: `${baby}: diaper check`,
+      body: `It's been ${formatMinutes(diaper.intervalMin)} since the last diaper change.`,
+    })
+  }
+
+  return out
+}

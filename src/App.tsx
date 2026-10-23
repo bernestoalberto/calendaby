@@ -4,8 +4,9 @@ import { callAgent, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
 import { napForecast } from './domain/analytics'
 import type { BabyEvent, DraftEvent } from './domain/events'
-import { napAlerts } from './domain/notifications'
+import { smartAlerts } from './domain/notifications'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
+import { deduceInsights } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
 import {
@@ -98,17 +99,17 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
+  const insights = useMemo(() => deduceInsights(events, baby, now), [events, baby, now])
   const current = sessions.at(-1)
   const asleep = current !== undefined && current.end === undefined
   const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
   const lastOf = (kind: BabyEvent['kind']) => [...events].reverse().find((e) => e.kind === kind)
   const age = birth ? babyAge(birth, now) : undefined
-  const nextNapAt = forecast?.nextNapAt
 
   useEffect(() => {
     const active = reminders && notifAccess === 'granted'
-    void syncNapNotifications(active, active ? napAlerts(baby, forecast, asleep, nowMs()) : [])
-  }, [reminders, notifAccess, baby, asleep, nextNapAt, forecast])
+    void syncNapNotifications(active, active ? smartAlerts(baby, events, nowMs()) : [])
+  }, [reminders, notifAccess, baby, events])
 
   function refresh() {
     setEvents(store.list())
@@ -313,6 +314,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             napsToday={day.naps}
             day={day}
             forecast={forecast}
+            insights={insights}
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
             lastMed={lastOf('med')}
@@ -325,7 +327,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onQuick={openLog}
             onFullStats={() => setTab('analytics')}
             onShareHandoff={() => setSheet('handoff')}
-            onAsk={() => setTab('agent')}
+            onAsk={(prompt) => {
+              setTab('agent')
+              if (prompt) void ask(prompt)
+            }}
           />
         )}
         {tab === 'log' && (

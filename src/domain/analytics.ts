@@ -1,5 +1,5 @@
-import type { BabyEvent } from './events'
-import { sleepSessions } from './summary'
+import type { BabyEvent } from './events.js'
+import { sleepSessions } from './summary.js'
 
 /** Sleep between 7 pm and 7 am counts as night sleep. */
 export const NIGHT_START_HOUR = 19
