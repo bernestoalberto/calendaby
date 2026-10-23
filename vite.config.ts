@@ -66,8 +66,8 @@ export default defineConfig({
         name: 'Calendaby',
         short_name: 'Calendaby',
         description: 'Baby tracker that logs from one sentence and hands off between caregivers.',
-        theme_color: '#121b2b',
-        background_color: '#121b2b',
+        theme_color: '#16131a',
+        background_color: '#16131a',
         display: 'standalone',
         start_url: '/',
         icons: [

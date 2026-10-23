@@ -1,5 +1,5 @@
 // Builds the web app, syncs it into the Android project and builds the debug APK. If a phone or emulator
-// is connected it installs the APK; otherwise it skips the install and still exits 0.
+// is connected it installs the APK and opens the app; otherwise it skips the install and still exits 0.
 // Works on Windows, macOS and Linux. Needs adb on PATH and USB debugging on to install.
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -7,6 +7,7 @@ import { join } from 'node:path'
 
 const win = process.platform === 'win32'
 const android = join(process.cwd(), 'android')
+const appId = 'com.calendaby.app'
 const apk = join(android, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk')
 
 // A stale JAVA_HOME (an uninstalled JDK) breaks Gradle; fall back to Android Studio's bundled JDK.
@@ -54,6 +55,10 @@ if (devices === undefined) {
 } else if (devices.length === 0) {
   console.log(`\nBuilt ${apk}\nSkipped install: no phone or emulator connected (check the cable and USB debugging).`)
 } else {
-  for (const serial of devices) run(adb, ['-s', serial, 'install', '-r', apk])
-  console.log(`\nInstalled on ${devices.length} device${devices.length === 1 ? '' : 's'}. Open Calendaby on the phone.`)
+  for (const serial of devices) {
+    run(adb, ['-s', serial, 'install', '-r', apk])
+    // Starts the app; on a locked screen it opens as soon as the phone is unlocked.
+    run(adb, ['-s', serial, 'shell', 'am', 'start', '-n', `${appId}/.MainActivity`])
+  }
+  console.log(`\nInstalled on ${devices.length} device${devices.length === 1 ? '' : 's'}. Calendaby is opening on the phone.`)
 }
