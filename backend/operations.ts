@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { BabyEvent } from '../src/domain/events'
-import type { Db } from './db'
+import { BabyEvent } from '../src/domain/events.js'
+import type { Db } from './db.js'
 
 function operation<S extends z.ZodType, R>(description: string, input: S, run: (db: Db, input: z.infer<S>) => R) {
   return { description, input, run }

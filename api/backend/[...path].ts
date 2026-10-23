@@ -1,6 +1,4 @@
 import { handle } from 'hono/vercel'
-import { createApp, sharedDb } from '../../backend/app'
+import { createApp, sharedDb } from '../../backend/app.js'
 
-const app = createApp(sharedDb()).basePath('/api/backend')
-
-export const POST = handle(app)
+export const POST = (request: Request) => handle(createApp(sharedDb()).basePath('/api/backend'))(request)

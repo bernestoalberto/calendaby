@@ -1,19 +1,22 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, isStepCount, tool, type LanguageModel } from 'ai'
 import { z } from 'zod'
-import { operations } from '../backend/operations'
-import type { Db } from '../backend/db'
-import type { AgentRequest, AgentResponse } from '../src/agents/remote'
-import { DraftEventSchema, type DraftEvent } from '../src/domain/events'
+import { operations } from '../backend/operations.js'
+import type { Db } from '../backend/db.js'
+import type { AgentRequest, AgentResponse } from '../src/agents/remote.js'
+import { DraftEventSchema, type DraftEvent } from '../src/domain/events.js'
 
-const openrouter = createOpenAICompatible({
-  name: 'openrouter',
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPEN_ROUTER_API,
-})
+export function apiKey(): string | undefined {
+  return process.env.OPEN_ROUTER_API || process.env.OPENROUTER_API_KEY
+}
 
 function pickModel(): LanguageModel {
-  return openrouter.chatModel(process.env.MODEL_NAME ?? 'openai/gpt-6-luna')
+  const openrouter = createOpenAICompatible({
+    name: 'openrouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: apiKey(),
+  })
+  return openrouter.chatModel(process.env.MODEL_NAME || 'openai/gpt-6-luna')
 }
 
 const SAFETY = `

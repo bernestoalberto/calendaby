@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { BabyEvent, DraftEventSchema, type DraftEvent } from '../domain/events'
-import { parseLog, type CaptureAgent, type CaptureResult } from './capture'
+import { BabyEvent, DraftEventSchema, type DraftEvent } from '../domain/events.js'
+import { parseLog, type CaptureAgent, type CaptureResult } from './capture.js'
 
 /** Body the app sends to /api/agent; the Vercel function runs the agent. */
 export const AgentRequest = z.object({

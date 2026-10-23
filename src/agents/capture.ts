@@ -1,4 +1,4 @@
-import type { DraftEvent } from '../domain/events'
+import type { DraftEvent } from '../domain/events.js'
 
 export interface CaptureResult {
   drafts: DraftEvent[]

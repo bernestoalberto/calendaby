@@ -1,9 +1,9 @@
-import { runAgent } from '../agent/agent'
-import { sharedDb } from '../backend/app'
-import { AgentRequest, AgentResponse } from '../src/agents/remote'
+import { apiKey, runAgent } from '../agent/agent.js'
+import { sharedDb } from '../backend/app.js'
+import { AgentRequest, AgentResponse } from '../src/agents/remote.js'
 
 export async function POST(request: Request): Promise<Response> {
-  if (!process.env.OPEN_ROUTER_API) {
+  if (!apiKey()) {
     return Response.json({ error: 'Agent is not configured' }, { status: 503 })
   }
 

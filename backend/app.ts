@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { openDb, type Db } from './db'
-import { operations } from './operations'
+import { openDb, type Db } from './db.js'
+import { operations } from './operations.js'
 
 export function createApp(db: Db) {
   const app = new Hono()
