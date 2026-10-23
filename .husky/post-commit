@@ -1,0 +1,3 @@
+# Build the debug APK and install it on a connected phone. Never blocks or fails the commit.
+# Skip with SKIP_ANDROID_INSTALL=1 git commit ...
+[ "$SKIP_ANDROID_INSTALL" = "1" ] || npm run android:install || echo "android:install failed; the commit is unaffected."
