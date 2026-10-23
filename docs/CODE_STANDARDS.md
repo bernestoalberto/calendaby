@@ -6,7 +6,7 @@
 4. Python: always `uv run`. TypeScript: npm scripts that work on Windows, macOS and Linux.
 5. No secrets in git. `.env` files stay local; `.env.example` documents them.
 
-## Eight working rules
+## Nine working rules
 
 For the agent and the owner. Each rule has a concrete check in this repo.
 
@@ -18,6 +18,7 @@ For the agent and the owner. Each rule has a concrete check in this repo.
 6. **Shrink the blast radius.** Small diffs, one concern per commit, behind a seam. Signed-out and guest mode must keep working after every change.
 7. **Write down the why.** Record decisions in `docs/` (ADR-style line in `ARCHITECTURE.md` or the plan) and keep `STATUS.md` current. Commit messages say why, not what.
 8. **Don't install a package you haven't checked.** Before `npm install`: is it maintained, what is its size and license, does the platform or an existing dependency already cover it, and does it run on Windows, macOS and Linux? Name the answer in the commit or plan.
+9. **No hardcoded data when a database is available.** Lists, labels, options, defaults, thresholds and user choices that can change belong in SQLite (on the device) or the backend database, read at runtime. Code keeps only the schema, a seed for a fresh database, and the logic that acts on the data. Before adding a constant array or object that the user could reasonably customize, check for a table or settings key and use it. Seeds must never overwrite stored choices.
 
 ## Reminders
 

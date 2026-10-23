@@ -1397,13 +1397,43 @@ main {
   font-size: 11px;
 }
 
-.event .delete {
+.event .delete,
+.event .edit {
   position: absolute;
   right: 4px;
   bottom: 2px;
   width: 36px;
   height: 36px;
   color: var(--muted);
+}
+
+.event .edit {
+  right: 40px;
+}
+
+.feature-group {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.feature-row span {
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-row input {
+  width: 22px;
+  height: 22px;
+  flex: none;
 }
 
 /* Analytics */

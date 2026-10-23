@@ -87,4 +87,35 @@ describe('SqliteEventStore', () => {
     await store.setSetting('caregiver', 'Dad')
     expect(await store.getSetting('caregiver')).toBe('Dad')
   })
+
+  it('edits an event in place, keeps who logged it and re-sorts', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    const a = await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')
+    await store.append({ kind: 'diaper', at: 2_000_000, contents: 'wet' }, 'mom')
+    await store.update(a.id, { kind: 'feed', at: 3_000_000, method: 'bottle', amountMl: 90 })
+    const reopened = await SqliteEventStore.open(driver)
+    expect(reopened.list().map((e) => [e.kind, e.at, e.loggedBy])).toEqual([
+      ['diaper', 2_000_000, 'mom'],
+      ['feed', 3_000_000, 'dad'],
+    ])
+  })
+
+  it('refuses an invalid edit and an edit of a missing entry', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const a = await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')
+    await expect(store.update(a.id, { kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 1200 })).rejects.toThrow()
+    expect(store.list()[0]).toMatchObject({ amountMl: 120 })
+    await expect(store.update('nope', { kind: 'note', at: 1, note: 'x' })).rejects.toThrow()
+  })
+
+  it('seeds features on and keeps a choice across reopen', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    expect((await store.listFeatures()).every((f) => f.enabled)).toBe(true)
+    await store.setFeature('timeline', false)
+    const rows = await (await SqliteEventStore.open(driver)).listFeatures()
+    expect(rows.find((f) => f.id === 'timeline')?.enabled).toBe(false)
+    expect(rows.find((f) => f.id === 'agent')?.enabled).toBe(true)
+  })
 })

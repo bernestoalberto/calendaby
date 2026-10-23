@@ -1,3 +1,4 @@
+import type { FeatureRow } from '../domain/features'
 import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
 import { Badge, Segmented } from './controls'
@@ -5,6 +6,9 @@ import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { babyAge, type Unit } from './time'
 
 interface Props {
+  features: FeatureRow[]
+  handoffOn: boolean
+  onToggleFeature: (id: string, enabled: boolean) => void
   now: number
   baby: string
   birth: string
@@ -64,9 +68,11 @@ export function Profile(p: Readonly<Props>) {
           <span className="field-label">Your name (shown on each log)</span>
           <input defaultValue={p.caregiver} onBlur={(e) => e.target.value.trim() && p.onSetting('caregiver', e.target.value.trim())} />
         </label>
-        <button type="button" className="pill quiet wide" onClick={p.onHandoff}>
-          <ShareIcon width={18} height={18} /> Hand off to the next caregiver
-        </button>
+        {p.handoffOn && (
+          <button type="button" className="pill quiet wide" onClick={p.onHandoff}>
+            <ShareIcon width={18} height={18} /> Hand off to the next caregiver
+          </button>
+        )}
       </section>
 
       <section className="card">
@@ -97,6 +103,29 @@ export function Profile(p: Readonly<Props>) {
             </button>
           )}
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h3>Features</h3>
+        </div>
+        <p className="muted">Turn off anything you do not use. Your logs are kept either way.</p>
+        {[...new Set(p.features.map((f) => f.group))].map((group) => (
+          <fieldset key={group} className="feature-group">
+            <legend className="field-label">{group}</legend>
+            {p.features
+              .filter((f) => f.group === group)
+              .map((f) => (
+                <label key={f.id} className="feature-row">
+                  <span>
+                    <b>{f.label}</b>
+                    <small className="muted">{f.hint}</small>
+                  </span>
+                  <input type="checkbox" role="switch" checked={f.enabled} onChange={() => p.onToggleFeature(f.id, !f.enabled)} />
+                </label>
+              ))}
+          </fieldset>
+        ))}
       </section>
 
       <section className="card">

@@ -4,7 +4,7 @@ import type { BabyEvent } from '../domain/events'
 import { sleepSessions, summarizeDay } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import { Badge, Segmented } from './controls'
-import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, MoonIcon, NoteIcon, PillIcon, SunIcon, TrashIcon } from './icons'
+import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, SunIcon, TrashIcon } from './icons'
 import { clock, eventDetail, eventHeading } from './kinds'
 import { duration, type Unit } from './time'
 
@@ -21,9 +21,10 @@ interface Props {
   unit: Unit
   baby: string
   onDelete: (events: BabyEvent[]) => void
+  onEdit: (events: BabyEvent[]) => void
 }
 
-export function Timeline({ events, now, unit, baby, onDelete }: Props) {
+export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
   const today = startOfDay(now)
   const [day, setDay] = useState(today)
   const [filter, setFilter] = useState<Filter>('all')
@@ -207,6 +208,7 @@ export function Timeline({ events, now, unit, baby, onDelete }: Props) {
                     </div>
                     <p>{end !== undefined ? `Woke at ${clock(end)}` : `${baby} has been asleep for ${duration(now - i.start)}`}</p>
                     {i.events.find((e) => e.note)?.note && <p className="event-note">{i.events.find((e) => e.note)?.note}</p>}
+                    {i.events.length > 0 && <EditButton label="Edit this sleep" onClick={() => onEdit(i.events)} />}
                     <DeleteButton label="Delete this sleep" onClick={() => onDelete(i.events)} />
                   </div>
                 </li>
@@ -234,6 +236,7 @@ export function Timeline({ events, now, unit, baby, onDelete }: Props) {
                   ) : null}
                   {e.note && <p className={e.kind === 'note' ? '' : 'event-note'}>{e.note}</p>}
                   <p className="by">by {e.loggedBy}</p>
+                  <EditButton label={`Edit ${eventHeading(e)}`} onClick={() => onEdit([e])} />
                   <DeleteButton label={`Delete ${eventHeading(e)}`} onClick={() => onDelete([e])} />
                 </div>
               </li>
@@ -256,6 +259,14 @@ function kindIcon(e: BabyEvent) {
     default:
       return <NoteIcon width={18} height={18} />
   }
+}
+
+function EditButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="icon-button edit" aria-label={label} onClick={onClick}>
+      <PencilIcon width={16} height={16} />
+    </button>
+  )
 }
 
 function DeleteButton({ label, onClick }: { label: string; onClick: () => void }) {

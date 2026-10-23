@@ -6,6 +6,7 @@ import { appointmentAlerts } from './domain/appointmentAlerts'
 import { Appointment as AppointmentSchema, type Appointment } from './domain/appointments'
 import { buildAgenda, type CalendarEvent } from './domain/calendar'
 import { napForecast } from './domain/analytics'
+import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { smartAlerts } from './domain/notifications'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
@@ -24,6 +25,7 @@ import { Analytics } from './ui/Analytics'
 import { Agent, type Chat } from './ui/Agent'
 import { Calendar } from './ui/Calendar'
 import { Sheet } from './ui/controls'
+import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
 import { Logger, type LogTab } from './ui/Logger'
@@ -66,6 +68,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [baby, setBaby] = useState('Baby')
   const [birth, setBirth] = useState('')
   const [unit, setUnit] = useState<Unit>('oz')
+  const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
+  const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
@@ -101,6 +105,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('baby').then((v) => v && setBaby(v))
     void store.getSetting('birth').then((v) => v && setBirth(v))
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
+    void store.listFeatures().then(setFeatureRows)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
@@ -116,6 +121,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     return () => clearTimeout(id)
   }, [toast])
 
+  const on = useMemo(() => featureFlags(featureRows), [featureRows])
   const brief = useMemo(() => buildHandoff(events, new Date(now)), [events, now])
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
@@ -240,6 +246,26 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     for (const e of list) await store.remove(e.id)
     refresh()
     setToast({ text: 'Undone' })
+  }
+
+  async function toggleFeature(id: string, enabled: boolean) {
+    await store.setFeature(id, enabled)
+    setFeatureRows(await store.listFeatures())
+    // Do not leave the user on a tab they just turned off.
+    if (!enabled && id === tab) setTab('today')
+  }
+
+  /** Returns a message to show in the sheet when the save fails, otherwise closes it. */
+  async function saveEdit(edits: EventEdit[]): Promise<string | undefined> {
+    try {
+      for (const e of edits) await store.update(e.id, e.draft)
+    } catch {
+      return "Couldn't save those changes"
+    }
+    refresh()
+    setEditing(null)
+    setToast({ text: 'Entry updated' })
+    return undefined
   }
 
   async function remove(list: BabyEvent[]) {
@@ -376,6 +402,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       <main>
         {tab === 'today' && (
           <Today
+            on={on}
             baby={baby}
             now={now}
             unit={unit}
@@ -421,11 +448,13 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onToggleSleep={toggleSleep}
           />
         )}
-        {tab === 'timeline' && <Timeline events={events} now={now} unit={unit} baby={baby} onDelete={(list) => void remove(list)} />}
-        {tab === 'analytics' && (
+        {tab === 'timeline' && on('timeline') && (
+          <Timeline events={events} now={now} unit={unit} baby={baby} onDelete={(list) => void remove(list)} onEdit={setEditing} />
+        )}
+        {tab === 'analytics' && on('analytics') && (
           <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
         )}
-        {tab === 'calendar' && (
+        {tab === 'calendar' && on('calendar') && (
           <Calendar
             signedIn={account.signedIn === true}
             onSignIn={account.requestSignIn}
@@ -438,9 +467,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onDecide={(id, status) => void decide(id, status)}
           />
         )}
-        {tab === 'agent' && <Agent baby={baby} chat={chat} busy={asking} online={online} onSend={(q) => void ask(q)} />}
+        {tab === 'agent' && on('agent') && <Agent baby={baby} chat={chat} busy={asking} online={online} onSend={(q) => void ask(q)} />}
         {tab === 'profile' && (
           <Profile
+            features={featureRows}
+            handoffOn={on('handoff')}
+            onToggleFeature={(id, enabled) => void toggleFeature(id, enabled)}
             now={now}
             baby={baby}
             birth={birth}
@@ -463,22 +495,28 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           <ClockIcon />
           Today
         </button>
-        <button type="button" aria-current={tab === 'timeline'} onClick={() => setTab('timeline')}>
-          <ListIcon />
-          Timeline
-        </button>
+        {on('timeline') && (
+          <button type="button" aria-current={tab === 'timeline'} onClick={() => setTab('timeline')}>
+            <ListIcon />
+            Timeline
+          </button>
+        )}
         <button type="button" className="fab" aria-current={tab === 'log'} onClick={() => setTab('log')}>
           <PlusIcon />
           Log
         </button>
-        <button type="button" aria-current={tab === 'calendar'} onClick={() => setTab('calendar')}>
-          <TodayIcon />
-          Calendar
-        </button>
-        <button type="button" aria-current={tab === 'agent'} onClick={() => setTab('agent')}>
-          <SparkIcon />
-          Agent
-        </button>
+        {on('calendar') && (
+          <button type="button" aria-current={tab === 'calendar'} onClick={() => setTab('calendar')}>
+            <TodayIcon />
+            Calendar
+          </button>
+        )}
+        {on('agent') && (
+          <button type="button" aria-current={tab === 'agent'} onClick={() => setTab('agent')}>
+            <SparkIcon />
+            Agent
+          </button>
+        )}
       </nav>
 
       {toast && (
@@ -491,6 +529,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           )}
         </div>
       )}
+
+      {editing && <EditSheet events={editing} unit={unit} onSave={saveEdit} onClose={() => setEditing(null)} />}
 
       {sheet === 'handoff' && (
         <Sheet

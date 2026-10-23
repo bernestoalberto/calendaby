@@ -30,6 +30,7 @@ export type QuickKind = 'feed' | 'diaper' | 'med' | 'note'
 const SLEEP_GOAL_MIN = 14 * 60
 
 interface Props {
+  on: (feature: string) => boolean
   baby: string
   now: number
   unit: Unit
@@ -69,9 +70,9 @@ export function Today(p: Props) {
         {p.asleep ? <MoonIcon width={18} height={18} /> : <SunIcon width={18} height={18} />}
       </div>
 
-      <NapCard {...p} />
+      {p.on('napForecast') && <NapCard {...p} />}
 
-      {p.insights.length > 0 && (
+      {p.on('insights') && p.insights.length > 0 && (
         <section className="card insight">
           <div className="card-head">
             <h3>
@@ -91,17 +92,19 @@ export function Today(p: Props) {
               </div>
             ))}
           </div>
-          <div className="tip-actions">
-            <button
-              type="button"
-              className="link strong"
-              onClick={() =>
-                p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
-              }
-            >
-              <SparkIcon width={16} height={16} /> Ask AI coach for deeper advice
-            </button>
-          </div>
+          {p.on('agent') && (
+            <div className="tip-actions">
+              <button
+                type="button"
+                className="link strong"
+                onClick={() =>
+                  p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
+                }
+              >
+                <SparkIcon width={16} height={16} /> Ask AI coach for deeper advice
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -142,6 +145,7 @@ export function Today(p: Props) {
         </div>
       </section>
 
+      {p.on('freeText') && (
       <form
         className="composer"
         onSubmit={(e: FormEvent) => {
@@ -165,7 +169,9 @@ export function Today(p: Props) {
           <SendIcon width={20} height={20} />
         </button>
       </form>
+      )}
 
+      {p.on('lastCards') && (
       <div className="last-grid">
         <LastCard
           icon={<MoonIcon />}
@@ -222,16 +228,20 @@ export function Today(p: Props) {
           detail={p.lastMed ? `${clock(p.lastMed.at)} • ${eventDetail(p.lastMed, p.unit)}` : 'None given'}
         />
       </div>
+      )}
 
+      {p.on('totals') && (
       <section className="card totals">
         <div className="card-head">
           <h3>
             <span className="ring-glyph" aria-hidden="true" />
             Today's Totals
           </h3>
-          <button type="button" className="link" onClick={p.onFullStats}>
-            Full stats <ChevronRightIcon width={16} height={16} />
-          </button>
+          {p.on('analytics') && (
+            <button type="button" className="link" onClick={p.onFullStats}>
+              Full stats <ChevronRightIcon width={16} height={16} />
+            </button>
+          )}
         </div>
         <div className="goal-row">
           <span>
@@ -266,7 +276,9 @@ export function Today(p: Props) {
           </div>
         </div>
       </section>
+      )}
 
+      {p.on('handoff') && (
       <section className="card tip">
         <span className="tip-icon">
           <BulbIcon />
@@ -283,12 +295,15 @@ export function Today(p: Props) {
             <button type="button" className="link strong" onClick={p.onShareHandoff}>
               <ShareIcon width={16} height={16} /> Share handoff
             </button>
-            <button type="button" className="link muted" onClick={() => p.onAsk()}>
-              Ask the agent
-            </button>
+            {p.on('agent') && (
+              <button type="button" className="link muted" onClick={() => p.onAsk()}>
+                Ask the agent
+              </button>
+            )}
           </div>
         </div>
       </section>
+      )}
     </div>
   )
 }

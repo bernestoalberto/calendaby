@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { SqlDriver } from '../db/driver'
 import { BabyEvent, type DraftEvent } from './events'
+import { DEFAULT_FEATURES, type FeatureRow } from './features'
 
 export interface EventStore {
   list(): BabyEvent[]
@@ -34,7 +35,9 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
+
+const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
 const MIGRATIONS: Record<number, string[]> = {
   1: [
@@ -48,6 +51,20 @@ const MIGRATIONS: Record<number, string[]> = {
     )`,
     'CREATE INDEX IF NOT EXISTS events_at ON events(at)',
     'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+  ],
+  2: [
+    `CREATE TABLE IF NOT EXISTS features (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      hint TEXT NOT NULL,
+      grp TEXT NOT NULL,
+      sort INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1
+    )`,
+    ...DEFAULT_FEATURES.map(
+      (f, i) =>
+        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
+    ),
   ],
 }
 
@@ -135,6 +152,27 @@ export class SqliteEventStore implements EventStore {
   async remove(id: string): Promise<void> {
     await this.db.exec('DELETE FROM events WHERE id = ?', [id])
     this.events = this.events.filter((e) => e.id !== id)
+  }
+
+  /** Replaces an event's contents in place, keeping its id and who logged it. */
+  async update(id: string, draft: DraftEvent): Promise<BabyEvent> {
+    const existing = this.events.find((e) => e.id === id)
+    if (!existing) throw new Error('That entry no longer exists')
+    const event = BabyEvent.parse({ ...draft, id, loggedBy: existing.loggedBy })
+    await this.db.exec('UPDATE events SET kind = ?, at = ?, body = ? WHERE id = ?', [event.kind, event.at, JSON.stringify(event), id])
+    this.events = this.events.map((e) => (e.id === id ? event : e)).sort((a, b) => a.at - b.at)
+    return event
+  }
+
+  async listFeatures(): Promise<FeatureRow[]> {
+    const rows = await this.db.query<{ id: string; label: string; hint: string; grp: string; enabled: number }>(
+      'SELECT id, label, hint, grp, enabled FROM features ORDER BY sort',
+    )
+    return rows.map((r) => ({ id: r.id, label: r.label, hint: r.hint, group: r.grp, enabled: r.enabled === 1 }))
+  }
+
+  async setFeature(id: string, enabled: boolean): Promise<void> {
+    await this.db.exec('UPDATE features SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, id])
   }
 
   async getSetting(key: string): Promise<string | undefined> {

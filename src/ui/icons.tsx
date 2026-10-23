@@ -83,7 +83,12 @@ export const TrashIcon = (p: IconProps) => (
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
   </Base>
 )
-export const TodayIcon = (p: IconProps) => (
+export const PencilIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3" />
+  </Base>
+)
+export const TodayIcon =(p: IconProps) => (
   <Base {...p}>
     <rect x="4" y="5" width="16" height="16" rx="2" />
     <path d="M4 10h16M9 3v4M15 3v4" />
