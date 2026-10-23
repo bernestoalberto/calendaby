@@ -1,6 +1,6 @@
 import { NIGHT_END_HOUR, NIGHT_START_HOUR, type NapForecast } from './analytics.js'
 import type { BabyEvent } from './events.js'
-import { diaperForecast, feedForecast, sleepForecast } from './predictions.js'
+import { diaperForecast, feedForecast, sleepForecast, type FeedForecast } from './predictions.js'
 import { formatMinutes, sleepSessions } from './summary.js'
 
 export interface NapAlert {
@@ -27,13 +27,22 @@ function isDaytime(ms: number): boolean {
   return h >= NIGHT_END_HOUR && h <= NIGHT_START_HOUR
 }
 
+function feedTipText(feed: FeedForecast): string {
+  if (feed.nextBreastSide) return ` Next nursing side: ${feed.nextBreastSide}.`
+  if (feed.usualBottleMl) {
+    const oz = (feed.usualBottleMl / 29.5735).toFixed(1)
+    return ` Usual bottle: ~${feed.usualBottleMl} ml (${oz} oz).`
+  }
+  return ''
+}
+
 /**
  * Upcoming notifications for the current wake window:
  * 1) 15 minutes before the predicted nap (wind-down reminder)
  * 2) At the predicted nap time
  */
 export function napAlerts(baby: string, forecast: NapForecast | undefined, asleep: boolean, now: number): NapAlert[] {
-  if (asleep || !forecast || forecast.nextNapAt === undefined) return []
+  if (asleep || forecast?.nextNapAt === undefined) return []
   const next = forecast.nextNapAt
   const soonAt = next - NAP_LEAD_MS
   const out: NapAlert[] = []
@@ -82,16 +91,11 @@ export function smartAlerts(baby: string, events: BabyEvent[], now: number): Nap
 
   const feed = feedForecast(events, now)
   if (feed && feed.nextFeedAt > now && isDaytime(feed.nextFeedAt)) {
-    const tip = feed.nextBreastSide
-      ? ` Next nursing side: ${feed.nextBreastSide}.`
-      : feed.usualBottleMl
-        ? ` Usual bottle: ~${feed.usualBottleMl} ml (${(feed.usualBottleMl / 29.5735).toFixed(1)} oz).`
-        : ''
     out.push({
       id: FEED_DUE_ID,
       at: feed.nextFeedAt,
       title: `${baby}: feed window open`,
-      body: `${baby} usually feeds every ${formatMinutes(feed.intervalMin)}.${tip}`,
+      body: `${baby} usually feeds every ${formatMinutes(feed.intervalMin)}.${feedTipText(feed)}`,
     })
   }
 

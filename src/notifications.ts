@@ -7,6 +7,12 @@ export type NotificationAccess = 'granted' | 'denied' | 'prompt' | 'unsupported'
 const TEST_ID = 199
 const webTimers: ReturnType<typeof setTimeout>[] = []
 
+function mapNativePermission(display: string): NotificationAccess {
+  if (display === 'granted') return 'granted'
+  if (display === 'denied') return 'denied'
+  return 'prompt'
+}
+
 function clearWebTimers() {
   while (webTimers.length > 0) {
     const id = webTimers.pop()
@@ -32,7 +38,7 @@ export async function notificationAccess(): Promise<NotificationAccess> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { display } = await LocalNotifications.checkPermissions()
-      return display === 'granted' ? 'granted' : display === 'denied' ? 'denied' : 'prompt'
+      return mapNativePermission(display)
     } catch {
       return 'unsupported'
     }
@@ -45,7 +51,7 @@ export async function requestNotificationAccess(): Promise<NotificationAccess> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { display } = await LocalNotifications.requestPermissions()
-      return display === 'granted' ? 'granted' : display === 'denied' ? 'denied' : 'prompt'
+      return mapNativePermission(display)
     } catch {
       return 'unsupported'
     }
@@ -112,4 +118,3 @@ export async function sendTestNotification(baby: string): Promise<boolean> {
   await showWebNotification(title, body)
   return true
 }
-

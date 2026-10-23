@@ -2,6 +2,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { createApp, sharedDb } from './backend/app.ts'
 
 /** Local dev: serve /api/agent with the same function Vercel runs, so no second process is needed. */
 function vercelApi(): Plugin {
@@ -10,9 +11,7 @@ function vercelApi(): Plugin {
     configureServer(server) {
       // Server-side settings (MODEL_NAME, OPENROUTER_API_KEY) from .env.local, for the dev functions only; never bundled.
       Object.assign(process.env, loadEnv(server.config.mode, process.cwd(), ''))
-      const backendApp = server.ssrLoadModule('/backend/app.ts')
       server.middlewares.use('/api/backend', async (req, res) => {
-        const { createApp, sharedDb } = await backendApp
         const chunks: Buffer[] = []
         for await (const chunk of req) chunks.push(chunk as Buffer)
         const out: Response = await createApp(sharedDb()).fetch(

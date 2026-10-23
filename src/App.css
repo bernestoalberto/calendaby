@@ -1546,8 +1546,9 @@ main {
   background: var(--primary-2);
 }
 
-.sage-text {
-  color: var(--sage-text) !important;
+.sage-text,
+.comp-head b.sage-text {
+  color: var(--sage-text);
 }
 
 .line {

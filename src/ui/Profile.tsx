@@ -19,7 +19,13 @@ interface Props {
   onHandoff: () => void
 }
 
-export function Profile(p: Props) {
+function reminderStatusLabel(reminders: boolean, access: NotificationAccess): string {
+  if (access === 'unsupported') return 'Unavailable'
+  if (access === 'denied') return 'Blocked'
+  return reminders ? 'On' : 'Off'
+}
+
+export function Profile(p: Readonly<Props>) {
   const age = p.birth ? babyAge(p.birth, p.now) : undefined
   return (
     <div className="stack">
@@ -66,13 +72,7 @@ export function Profile(p: Props) {
             <MoonIcon width={18} height={18} /> Smart Reminders
           </h3>
           <Badge tone={p.reminders && p.notifAccess === 'granted' ? 'sage' : 'oat'}>
-            {p.notifAccess === 'unsupported'
-              ? 'Unavailable'
-              : p.notifAccess === 'denied'
-                ? 'Blocked'
-                : p.reminders
-                  ? 'On'
-                  : 'Off'}
+            {reminderStatusLabel(p.reminders, p.notifAccess)}
           </Badge>
         </div>
         <p className="muted">

@@ -10,6 +10,17 @@ export interface DaySummary {
   changes: number
 }
 
+function addWakeEvent(s: DaySummary, e: BabyEvent): void {
+  if (e.kind === 'feed') {
+    s.feeds++
+    s.feedMl += e.amountMl ?? 0
+  } else if (e.kind === 'diaper') {
+    s.changes++
+    if (e.contents !== 'dirty') s.wet++
+    if (e.contents !== 'wet') s.dirty++
+  }
+}
+
 /** Totals since local midnight. Sleep that started before midnight counts from midnight. */
 export function summarizeDay(events: BabyEvent[], now: Date): DaySummary {
   const start = new Date(now)
@@ -19,11 +30,12 @@ export function summarizeDay(events: BabyEvent[], now: Date): DaySummary {
   const s: DaySummary = { feeds: 0, feedMl: 0, sleepMinutes: 0, naps: 0, wet: 0, dirty: 0, changes: 0 }
 
   let asleepSince: number | undefined
-  for (const e of [...events].sort((a, b) => a.at - b.at)) {
-    if (e.at > to) break
+  const sorted = [...events].filter((e) => e.at <= to).sort((a, b) => a.at - b.at)
+  for (const e of sorted) {
     if (e.kind === 'sleep') {
-      if (e.phase === 'start') asleepSince = e.at
-      else if (asleepSince !== undefined) {
+      if (e.phase === 'start') {
+        asleepSince = e.at
+      } else if (asleepSince !== undefined) {
         const mins = (e.at - Math.max(asleepSince, from)) / 60_000
         if (mins > 0) {
           s.sleepMinutes += mins
@@ -31,16 +43,8 @@ export function summarizeDay(events: BabyEvent[], now: Date): DaySummary {
         }
         asleepSince = undefined
       }
-      continue
-    }
-    if (e.at < from) continue
-    if (e.kind === 'feed') {
-      s.feeds++
-      s.feedMl += e.amountMl ?? 0
-    } else if (e.kind === 'diaper') {
-      s.changes++
-      if (e.contents !== 'dirty') s.wet++
-      if (e.contents !== 'wet') s.dirty++
+    } else if (e.at >= from) {
+      addWakeEvent(s, e)
     }
   }
   if (asleepSince !== undefined) s.sleepMinutes += Math.max(0, (to - Math.max(asleepSince, from)) / 60_000)

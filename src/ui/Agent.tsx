@@ -13,7 +13,7 @@ interface Props {
   onSend: (text: string) => void
 }
 
-export function Agent({ baby, chat, busy, online, onSend }: Props) {
+export function Agent({ baby, chat, busy, online, onSend }: Readonly<Props>) {
   const [text, setText] = useState('')
   const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
   const end = useRef<HTMLDivElement>(null)
@@ -66,8 +66,8 @@ export function Agent({ baby, chat, busy, online, onSend }: Props) {
       )}
 
       <ol className="chat">
-        {chat.map((m, i) => (
-          <li key={i} className={`bubble ${m.role}`}>
+        {chat.map((m) => (
+          <li key={`${m.role}:${m.text}`} className={`bubble ${m.role}`}>
             {m.text}
             {m.logged && m.logged.length > 0 && (
               <span className="logged">

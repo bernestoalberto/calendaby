@@ -40,6 +40,20 @@ function overlap(a: number, b: number, from: number, to: number): number {
   return Math.max(0, Math.min(b, to) - Math.max(a, from))
 }
 
+function addEventToDayStats(s: DayStats, e: BabyEvent): void {
+  if (e.kind === 'feed') {
+    s.feeds++
+    if (e.method === 'breast') s.nursing++
+    if (e.method === 'bottle') {
+      s.bottles++
+      s.bottleMl += e.amountMl ?? 0
+    }
+  } else if (e.kind === 'diaper') {
+    if (e.contents !== 'dirty') s.wet++
+    if (e.contents !== 'wet') s.dirty++
+  }
+}
+
 export function dailyStats(events: BabyEvent[], days: number, now: number): DayStats[] {
   const sessions = sleepSessions(events).map((s) => ({ start: s.start, end: s.end ?? now }))
   const today = startOfDay(now)
@@ -58,18 +72,7 @@ export function dailyStats(events: BabyEvent[], days: number, now: number): DayS
       if (start >= morning && start < evening) s.naps++
     }
     for (const e of events) {
-      if (e.at < day || e.at >= next) continue
-      if (e.kind === 'feed') {
-        s.feeds++
-        if (e.method === 'breast') s.nursing++
-        if (e.method === 'bottle') {
-          s.bottles++
-          s.bottleMl += e.amountMl ?? 0
-        }
-      } else if (e.kind === 'diaper') {
-        if (e.contents !== 'dirty') s.wet++
-        if (e.contents !== 'wet') s.dirty++
-      }
+      if (e.at >= day && e.at < next) addEventToDayStats(s, e)
     }
     s.nightMin = Math.round(s.nightMin)
     s.dayMin = Math.round(s.dayMin)
@@ -102,6 +105,6 @@ export function napForecast(events: BabyEvent[], now: number): NapForecast | und
   if (gaps.length < MIN_WINDOWS) return undefined
   const wakeWindowMin = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length / 60_000)
   const last = sessions.at(-1)
-  if (!last || last.end === undefined) return { wakeWindowMin }
+  if (last?.end === undefined) return { wakeWindowMin }
   return { wakeWindowMin, awakeSince: last.end, nextNapAt: last.end + wakeWindowMin * 60_000 }
 }

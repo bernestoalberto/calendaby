@@ -48,13 +48,13 @@ If the parent tells you something that happened, log it with record_events.
 ${SAFETY}`
 
 // The model writes `at` as ISO 8601; the app stores epoch ms.
-const ModelEvents = z.array(z.object({ at: z.string() }).passthrough())
+const ModelEvents = z.array(z.looseObject({ at: z.string() }))
 
 // Models misread epoch ms, so events go back to them in the parent's local time.
 function localTime(ms: number, now: string): string {
   const offset = now.slice(-6)
   const [h, m] = offset.slice(1).split(':').map(Number)
-  const shift = (offset[0] === '-' ? -1 : 1) * (h * 60 + m) * 60_000
+  const shift = (offset.startsWith('-') ? -1 : 1) * (h * 60 + m) * 60_000
   return new Date(ms + shift).toISOString().slice(0, 19) + offset
 }
 
@@ -100,17 +100,17 @@ export async function runAgent(req: AgentRequest, db: Db, model: LanguageModel =
       'and the fields for that kind: feed {method: bottle|breast|solids, amountMl?, side?: left|right|both}, ' +
       'sleep {phase: start|end}, diaper {contents: wet|dirty|both}, med {name, doseMl?}, note {note}.',
     inputSchema: z.object({ events: z.array(z.record(z.string(), z.unknown())) }),
-    execute: async ({ events }) => session.recordEvents(events),
+    execute: ({ events }) => session.recordEvents(events),
   })
   const askParent = tool({
     description: 'Ask the parent one short clarifying question when a needed detail is missing.',
     inputSchema: z.object({ question: z.string() }),
-    execute: async ({ question }) => session.askParent(question),
+    execute: ({ question }) => session.askParent(question),
   })
   const listEvents = tool({
     description: "List the baby's logged events from the last N hours, oldest first, with local times.",
     inputSchema: z.object({ hours: z.number().positive().max(720) }),
-    execute: async ({ hours }) =>
+    execute: ({ hours }) =>
       operations.listEvents
         .run(db, { since: Math.floor(session.now.getTime() - hours * 3_600_000) })
         .map((e) => ({ ...e, at: localTime(e.at, req.now) })),
@@ -119,7 +119,7 @@ export async function runAgent(req: AgentRequest, db: Db, model: LanguageModel =
     description:
       "Compute deduced rhythm predictions (next nap, usual nap length, expected wake time, next feed, usual bottle ml, next breast side, diaper cadence, bedtime sweet-spot), 7-day daily stats, and smart advice from the baby's past logs.",
     inputSchema: z.object({ babyName: z.string().optional() }),
-    execute: async ({ babyName }) => {
+    execute: ({ babyName }) => {
       const all = operations.listEvents.run(db, { since: Math.floor(session.now.getTime() - 7 * 24 * 3_600_000) })
       const nowMs = session.now.getTime()
       const sleep = sleepForecast(all, nowMs)
