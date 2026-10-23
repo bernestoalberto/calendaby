@@ -1,4 +1,4 @@
-import type { FormEvent, ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
 import type { SmartInsight } from '../domain/predictions'
@@ -10,7 +10,6 @@ import {
   BottleIcon,
   BreastIcon,
   BulbIcon,
-  CheckIcon,
   ChevronRightIcon,
   DiaperIcon,
   MicIcon,
@@ -72,47 +71,7 @@ export function Today(p: Props) {
 
       {p.on('napForecast') && <NapCard {...p} />}
 
-      {p.on('insights') && p.insights.length > 0 && (
-        <section className="card insight">
-          <div className="card-head">
-            <h3>
-              <SparkIcon width={20} height={20} /> Smart Predictions &amp; Advice
-            </h3>
-            <Badge tone="lilac">Live rhythm</Badge>
-          </div>
-          <div className="stack">
-            {p.insights.map((item) => (
-              <div key={item.id} className="insight-row">
-                <div className="card-head">
-                  <b>{item.title}</b>
-                  <Badge tone={item.tone}>{item.kind}</Badge>
-                </div>
-                <p className="muted">{item.prediction}</p>
-                <p>{item.advice}</p>
-              </div>
-            ))}
-          </div>
-          {p.on('agent') && (
-            <div className="tip-actions">
-              <button
-                type="button"
-                className="link strong"
-                onClick={() =>
-                  p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
-                }
-              >
-                <SparkIcon width={16} height={16} /> Ask AI coach for deeper advice
-              </button>
-            </div>
-          )}
-        </section>
-      )}
-
       <section>
-        <div className="section-head">
-          <h3>Quick Action</h3>
-          <span>One-tap entry</span>
-        </div>
         <div className="quick-row">
           <button type="button" className={p.asleep ? 'quick sleep on' : 'quick sleep'} onClick={p.onToggleSleep}>
             <span>{p.asleep ? <SunIcon /> : <MoonIcon />}</span>
@@ -219,14 +178,16 @@ export function Today(p: Props) {
           value={p.lastDiaper ? eventDetail(p.lastDiaper, p.unit) : '—'}
           detail={p.lastDiaper ? `${clock(p.lastDiaper.at)}${p.lastDiaper.note ? ` • ${p.lastDiaper.note}` : ''}` : 'No change logged'}
         />
-        <LastCard
-          icon={<PillIcon />}
-          tone="lilac"
-          badge={p.lastMed ? <Badge>{ago(p.now - p.lastMed.at)}</Badge> : null}
-          label="Last Medicine"
-          value={p.lastMed?.kind === 'med' ? p.lastMed.name.replace(/\b\w/g, (c) => c.toUpperCase()) : '—'}
-          detail={p.lastMed ? `${clock(p.lastMed.at)} • ${eventDetail(p.lastMed, p.unit)}` : 'None given'}
-        />
+        {p.lastMed && (
+          <LastCard
+            icon={<PillIcon />}
+            tone="lilac"
+            badge={<Badge>{ago(p.now - p.lastMed.at)}</Badge>}
+            label="Last Medicine"
+            value={p.lastMed.kind === 'med' ? p.lastMed.name.replace(/\b\w/g, (c) => c.toUpperCase()) : '—'}
+            detail={`${clock(p.lastMed.at)} • ${eventDetail(p.lastMed, p.unit)}`}
+          />
+        )}
       </div>
       )}
 
@@ -278,6 +239,8 @@ export function Today(p: Props) {
       </section>
       )}
 
+      {p.on('insights') && p.insights.length > 0 && <Insights {...p} />}
+
       {p.on('handoff') && (
       <section className="card tip">
         <span className="tip-icon">
@@ -286,11 +249,6 @@ export function Today(p: Props) {
         <div>
           <p className="eyebrow">Handoff</p>
           <h3>{p.brief.headline}</h3>
-          <ul>
-            {p.brief.lines.slice(0, 3).map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
           <div className="tip-actions">
             <button type="button" className="link strong" onClick={p.onShareHandoff}>
               <ShareIcon width={16} height={16} /> Share handoff
@@ -410,9 +368,52 @@ function NapCard(p: Props) {
           </text>
         </svg>
       </div>
-      <p className="nap-foot">
-        <CheckIcon width={16} height={16} /> Based on {p.baby}'s own naps over the last 3 days
-      </p>
+    </section>
+  )
+}
+
+// Only the top insight shows; the rest wait behind a tap so the screen stays calm.
+function Insights(p: Props) {
+  const [open, setOpen] = useState(false)
+  const shown = open ? p.insights : p.insights.slice(0, 1)
+  const hidden = p.insights.length - shown.length
+  return (
+    <section className="card insight">
+      <div className="card-head">
+        <h3>
+          <SparkIcon width={20} height={20} /> Advice
+        </h3>
+      </div>
+      <div className="stack">
+        {shown.map((item) => (
+          <div key={item.id} className="insight-row">
+            <div className="card-head">
+              <b>{item.title}</b>
+              <Badge tone={item.tone}>{item.kind}</Badge>
+            </div>
+            <p className="muted">{item.prediction}</p>
+            {open && <p>{item.advice}</p>}
+          </div>
+        ))}
+      </div>
+      <div className="tip-actions">
+        {(hidden > 0 || open) && (
+          <button type="button" className="link strong" onClick={() => setOpen(!open)}>
+            {open ? 'Show less' : `Show ${hidden} more`}
+          </button>
+        )}
+        {p.on('agent') && (
+          <button
+            type="button"
+            className="link muted"
+            onClick={() =>
+              p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
+            }
+          >
+            Ask the coach
+          </button>
+        )}
+      </div>
     </section>
   )
 }
