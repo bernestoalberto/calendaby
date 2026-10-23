@@ -21,12 +21,12 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.0",
-    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor-community/sqlite": "^8.1.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capacitor/local-notifications": "^8.3.1",
+    "@capgo/capacitor-speech-recognition": "^8.4.4",
     "@clerk/backend": "^3.26.1",
     "@clerk/react": "^6.18.0",
     "@sqlite.org/sqlite-wasm": "^3.54.1-build1",

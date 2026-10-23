@@ -23,6 +23,6 @@ For the agent and the owner. Each rule has a concrete check in this repo.
 ## Reminders
 
 - Before handing work over: `npm run check`, then say what was and was not verified.
-- Never push without the owner's approval; the owner runs and tests locally first.
+- Never run `git commit` or `git push`; give the owner the commands. He tests locally first.
 - Never commit `.env.local` or keys; Clerk `CLERK_SECRET_KEY` stays server-side.
 - Ask when a decision is the owner's (storage choice, Google verification, scope changes); otherwise pick a default and say so.

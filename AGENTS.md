@@ -10,4 +10,4 @@ A Huckleberry-style baby tracker built for dads and co-parents. Before you plan 
 
 Follow the nine working rules in `docs/CODE_STANDARDS.md` on every change.
 
-Never push without the owner's explicit approval; he runs and tests locally first.
+Never run `git commit` or `git push`. Give the owner the exact commands and he runs them himself, after testing locally. Staging with `git add` is also his call unless he asks.

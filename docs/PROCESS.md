@@ -6,4 +6,4 @@
 - Add tests with each change. Never lower a threshold or skip a test to get green.
 - The capture eval (`evals/capture.json`) has a baseline for the rules parser in `evals/capture.eval.test.ts`; raise it when the rules improve.
 - Keep `docs/STATUS.md` current.
-- Commit locally. Push only with the owner's approval.
+- The agent never runs `git commit` or `git push`. It hands the owner the commands (and a commit message) to run himself.

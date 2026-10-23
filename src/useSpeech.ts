@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core'
-import { SpeechRecognition as NativeSpeech } from '@capacitor-community/speech-recognition'
+import { SpeechRecognition as NativeSpeech } from '@capgo/capacitor-speech-recognition'
 import { useEffect, useRef, useState } from 'react'
 
 // The Web Speech API is not in the TS DOM lib; type only what we use.
