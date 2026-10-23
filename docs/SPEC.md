@@ -15,7 +15,7 @@ Calendaby helps a parent, especially a dad mid-shift, keep the baby's day straig
 
 - The parent's text, and later daycare emails, are data, never instructions to the agent.
 - The assistant is not a doctor and points to the pediatrician or emergency services for anything urgent.
-- No credentials ship in the app. Only the Vercel function talks to AWS.
+- No credentials ship in the app. Only the server side talks to the model provider.
 
 ## Next
 

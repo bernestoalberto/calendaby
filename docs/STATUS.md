@@ -5,40 +5,27 @@
 - PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input.
 - Capacitor config for iOS and Android (native projects not generated yet).
 - Hybrid capture: the rules parser handles what it can on the phone; leftovers go to the agent.
-- Strands agent (`agent/`) with `capture` and `chat` modes and typed tools, ready for AgentCore.
-- Vercel function `api/agent.ts` that invokes the AgentCore runtime. It returns 503 until `AGENT_RUNTIME_ARN` is set.
+- `backend/`: Hono routes on SQLite (`node:sqlite`), one POST route per operationId (`recordEvents`, `listEvents`).
+- `agent/agent.ts`: capture and chat modes. `listEvents` is a backend operation used as a tool. Each agent call first syncs the app's events into the backend.
+- Model from `MODEL_NAME`: OpenRouter, default `openai/gpt-6-luna`.
+- Husky pre-commit runs `npm run check` (lint, build, tests including a dev-server smoke test).
+- `agent/*.py`, `agent/tests` and `agent/uv.lock` are the old Python agent and can be deleted.
 
-## Run locally (Windows PowerShell, macOS or Linux)
+## Run locally
 
-Needs Node 20+, `uv`, and for the assistant, AWS credentials with Bedrock model access (`aws configure` or `aws sso login`).
+Needs Node 22.13+. Copy `.env.example` to `.env.local`; set `OPEN_ROUTER_API` if it is not already an environment variable.
 
 ```bash
 npm install
-cd agent; uv sync; cd ..
-npm run dev              # app at http://localhost:5173, logging works offline
+npx vite --host        # http://localhost:5173, API at /api/backend and /api/agent
+npm run check          # lint, build, tests
 ```
 
-With the assistant, in a second terminal:
-
-```bash
-copy agent\.env.example agent\.env    # macOS/Linux: cp agent/.env.example agent/.env
-npm run agent                          # agent on http://localhost:8080
-```
-
-Try "fed 120 ml at 3, grandma visited" (the second part goes to the agent) and ask "how much has she eaten today?".
-
-```bash
-npm run check            # everything, no model calls
-cd agent; uv run evals.py  # live agent on the eval set (costs a few cents)
-```
-
-## Deploy (not done yet)
-
-1. `cd agent; uv run agentcore configure -e calendaby_agent.py --region us-west-2; uv run agentcore launch`
-2. On Vercel, import the repo and set the variables in `.env.example`, including the runtime ARN from step 1.
+In PowerShell, `npm run dev -- --host` fails; use `npx vite --host`.
 
 ## Known gaps
 
-- `/api/agent` has no sign-in yet, so keep `AGENT_RUNTIME_ARN` unset in production until Clerk auth and usage limits land.
-- Events live on one device; syncing between parents needs a backend.
-- The rules parser misses some phrasings that it doesn't flag as unclear ("about 60" without ml).
+- The app still writes to its own SQLite; the backend only receives events when the agent is called. Full sync and sign-in are next.
+- A SQLite file on Vercel does not persist; hosted storage needs Turso or Postgres.
+- `/api/agent` has no sign-in, so keep it off the public internet.
+- The rules parser misses some phrasings it doesn't flag as unclear ("about 60" without ml).

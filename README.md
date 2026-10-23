@@ -4,12 +4,12 @@ A baby tracker for dads and co-parents. It logs from one sentence, catches dupli
 
 ## Run it
 
-See [docs/STATUS.md](docs/STATUS.md) for local setup on Windows, macOS or Linux, with and without the AI assistant.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together, how to run and test it, and how to deploy. Status and gaps are in [docs/STATUS.md](docs/STATUS.md).
 
 ```bash
 npm install
 npm run dev      # PWA at http://localhost:5173
-npm run check    # lint, build, tests, agent tests
+npm run check    # lint, build, tests
 ```
 
 ## Native apps
@@ -33,8 +33,9 @@ npm run cap:ios       # build, sync and open Xcode
 | `src/agents/handoff.ts` | Handoff agent: the 30-second brief for the incoming caregiver |
 | `src/agents/remote.ts` | Hybrid capture: rules first, the agent only for leftovers |
 | `src/useSpeech.ts` | Voice input through the Web Speech API |
-| `api/agent.ts` | Vercel function that invokes the agent on AgentCore |
-| `agent/` | Strands agent for AgentCore: capture and chat modes, typed tools |
+| `backend/` | Hono API on SQLite: every operation has an operationId, a one-line description and required inputs |
+| `agent/` | Agent: tools from the backend operations, model from MODEL_NAME on OpenRouter |
+| `api/` | Vercel functions: `/api/agent` and `/api/backend` |
 | `evals/` | Capture eval set shared by the rules test and the live agent |
 
 Logging works offline with the rules parser. Only what it can't parse goes to the agent, so most entries cost nothing. Design notes are in `docs/`.

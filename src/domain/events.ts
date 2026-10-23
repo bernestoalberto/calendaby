@@ -19,6 +19,10 @@ export const FeedEvent = z.object({
   method: z.enum(['bottle', 'breast', 'solids']),
   amountMl: z.number().positive().max(400).optional(),
   side: z.enum(['left', 'right', 'both']).optional(),
+  milk: z.enum(['breastmilk', 'formula']).optional(),
+  durationMin: z.number().int().positive().max(240).optional(),
+  leftMin: z.number().int().nonnegative().max(240).optional(),
+  rightMin: z.number().int().nonnegative().max(240).optional(),
 })
 
 export const SleepEvent = z.object({

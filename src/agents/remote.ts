@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { BabyEvent, DraftEventSchema, type DraftEvent } from '../domain/events'
 import { parseLog, type CaptureAgent, type CaptureResult } from './capture'
 
-/** Body the app sends to /api/agent; the Vercel function forwards it to AgentCore. */
+/** Body the app sends to /api/agent; the Vercel function runs the agent. */
 export const AgentRequest = z.object({
   mode: z.enum(['capture', 'chat']),
   prompt: z.string().min(1).max(2000),

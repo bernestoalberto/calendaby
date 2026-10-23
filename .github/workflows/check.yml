@@ -17,7 +17,5 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: astral-sh/setup-uv@v6
       - run: npm ci
-      - run: cd agent && uv sync
       - run: npm run check

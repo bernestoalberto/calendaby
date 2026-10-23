@@ -1,213 +1,384 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, HybridCaptureAgent, isoWithOffset } from './agents/remote'
-import type { BabyEvent } from './domain/events'
-import { DuplicateEventError, LocalEventStore } from './domain/store'
+import { openDriver } from './db/open'
+import { napForecast } from './domain/analytics'
+import type { BabyEvent, DraftEvent } from './domain/events'
+import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
+import { DuplicateEventError, SqliteEventStore } from './domain/store'
+import { sleepSessions, summarizeDay } from './domain/summary'
+import { Analytics } from './ui/Analytics'
+import { Agent, type Chat } from './ui/Agent'
+import { Sheet } from './ui/controls'
+import { ChartIcon, ClockIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon } from './ui/icons'
+import { eventTitle } from './ui/kinds'
+import { Logger, type LogTab } from './ui/Logger'
+import { Profile } from './ui/Profile'
+import { babyAge, type Unit } from './ui/time'
+import { Timeline } from './ui/Timeline'
+import { Today } from './ui/Today'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
-const store = new LocalEventStore()
 const capture = new HybridCaptureAgent()
-const CAREGIVER_KEY = 'calendaby.caregiver'
+// Kept out of render so components stay pure.
+const nowMs = () => Date.now()
+type Tab = 'today' | 'timeline' | 'log' | 'analytics' | 'agent' | 'profile'
+type Toast = { text: string; undo?: BabyEvent[] }
 
-function describe(e: BabyEvent): string {
-  switch (e.kind) {
-    case 'feed':
-      return `Feed, ${e.method}${e.amountMl ? `, ${e.amountMl} ml` : ''}${e.side ? `, ${e.side}` : ''}`
-    case 'sleep':
-      return e.phase === 'start' ? 'Fell asleep' : 'Woke up'
-    case 'diaper':
-      return `Diaper, ${e.contents}`
-    case 'med':
-      return `Medicine, ${e.name}${e.doseMl ? ` ${e.doseMl} ml` : ''}`
-    case 'note':
-      return e.note
-  }
-}
-
-function readCaregiver(): string {
-  try {
-    return localStorage.getItem(CAREGIVER_KEY) ?? 'Dad'
-  } catch {
-    return 'Dad'
-  }
+let opened: Promise<SqliteEventStore> | undefined
+function storeOpen(): Promise<SqliteEventStore> {
+  return (opened ??= openDriver().then((driver) => SqliteEventStore.open(driver, localStorage)))
 }
 
 export default function App() {
-  const [events, setEvents] = useState(() => store.list())
-  const [text, setText] = useState('')
-  const [caregiver, setCaregiver] = useState(readCaregiver)
-  const [messages, setMessages] = useState<string[]>([])
-  const [showHandoff, setShowHandoff] = useState(false)
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [asking, setAsking] = useState(false)
-  const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
+  const [store, setStore] = useState<SqliteEventStore | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
 
-  // Ticks each minute so "asleep for 40 min" stays current without a reload.
-  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(id)
+    storeOpen().then(setStore, (err: unknown) => setFailed(err instanceof Error ? err.message : String(err)))
   }, [])
 
-  const brief = useMemo(() => buildHandoff(events, new Date(now)), [events, now])
+  if (failed) return <main className="center">{failed}</main>
+  if (!store) return <main className="center">Opening…</main>
+  return <Tracker store={store} />
+}
 
-  async function log() {
-    if (!text.trim()) return
-    const { drafts, unsure } = await capture.capture(text, new Date())
-    const notes: string[] = []
+function Tracker({ store }: { store: SqliteEventStore }) {
+  const [events, setEvents] = useState(() => store.list())
+  const [caregiver, setCaregiver] = useState('Dad')
+  const [baby, setBaby] = useState('Baby')
+  const [birth, setBirth] = useState('')
+  const [unit, setUnit] = useState<Unit>('oz')
+  const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
+  const [tab, setTab] = useState<Tab>('today')
+  const [logTab, setLogTab] = useState<LogTab>('feed')
+  const [sheet, setSheet] = useState<'handoff' | null>(null)
+  const [text, setText] = useState('')
+  const [toast, setToast] = useState<Toast | null>(null)
+  const [chat, setChat] = useState<Chat[]>([])
+  const [asking, setAsking] = useState(false)
+  const [online, setOnline] = useState<boolean>()
+  const [now, setNow] = useState(nowMs)
+  const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
+
+  const fastTick = tab === 'log' || timer.running !== undefined
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowMs()), fastTick ? 1000 : 30_000)
+    return () => clearInterval(id)
+  }, [fastTick])
+
+  useEffect(() => {
+    void store.getSetting('caregiver').then((v) => v && setCaregiver(v))
+    void store.getSetting('baby').then((v) => v && setBaby(v))
+    void store.getSetting('birth').then((v) => v && setBirth(v))
+    void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
+    void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
+  }, [store])
+
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast(null), 5000)
+    return () => clearTimeout(id)
+  }, [toast])
+
+  const brief = useMemo(() => buildHandoff(events, new Date(now)), [events, now])
+  const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
+  const sessions = useMemo(() => sleepSessions(events), [events])
+  const forecast = useMemo(() => napForecast(events, now), [events, now])
+  const current = sessions.at(-1)
+  const asleep = current !== undefined && current.end === undefined
+  const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
+  const lastOf = (kind: BabyEvent['kind']) => [...events].reverse().find((e) => e.kind === kind)
+  const age = birth ? babyAge(birth, now) : undefined
+
+  function refresh() {
+    setEvents(store.list())
+    setNow(nowMs())
+  }
+
+  async function logAll(drafts: DraftEvent[]): Promise<{ added: BabyEvent[]; problems: string[] }> {
+    const added: BabyEvent[] = []
+    const problems: string[] = []
     for (const d of drafts) {
       try {
-        store.append(d, caregiver)
+        added.push(await store.append(d, caregiver))
       } catch (err) {
-        notes.push(err instanceof DuplicateEventError ? err.message : `Skipped a ${d.kind}: ${String(err)}`)
+        problems.push(err instanceof DuplicateEventError ? err.message : `Couldn't save a ${d.kind}`)
       }
     }
-    for (const u of unsure) notes.push(`Not logged: ${u}`)
-    setEvents(store.list())
-    setNow(Date.now())
-    setMessages(notes)
-    // Keep only what still needs the parent's attention in the box.
+    refresh()
+    return { added, problems }
+  }
+
+  async function quickLog(...drafts: DraftEvent[]) {
+    const { added, problems } = await logAll(drafts)
+    setToast(
+      added.length
+        ? {
+            text: `Logged: ${added.map((e) => eventTitle(e, unit)).join(', ')}`,
+            undo: added,
+          }
+        : { text: problems[0] ?? 'Nothing to log' },
+    )
+  }
+
+  function toggleSleep() {
+    void quickLog({
+      kind: 'sleep',
+      at: nowMs(),
+      phase: asleep ? 'end' : 'start',
+    })
+  }
+
+  async function logText() {
+    if (!text.trim()) return
+    const { drafts, unsure } = await capture.capture(text, new Date(nowMs()))
+    const { added, problems } = await logAll(drafts)
+    const parts = [
+      added.length ? `Logged ${added.map((e) => eventTitle(e, unit)).join(', ')}` : '',
+      ...problems,
+      ...unsure.map((u) => `Not logged: "${u}"`),
+    ].filter(Boolean)
+    setToast({
+      text: parts.join('. ') || 'Nothing to log',
+      undo: added.length ? added : undefined,
+    })
     setText(unsure.join(', '))
   }
 
-  async function ask() {
-    if (!question.trim()) return
+  async function undo(list: BabyEvent[]) {
+    for (const e of list) await store.remove(e.id)
+    refresh()
+    setToast({ text: 'Undone' })
+  }
+
+  async function remove(list: BabyEvent[]) {
+    for (const e of list) await store.remove(e.id)
+    refresh()
+    setToast({
+      text: list.length > 1 ? 'Deleted sleep' : `Deleted ${eventTitle(list[0], unit)}`,
+    })
+  }
+
+  async function ask(q: string) {
+    setChat((c) => [...c, { role: 'you', text: q }])
     setAsking(true)
     try {
-      const res = await callAgent({ mode: 'chat', prompt: question, now: isoWithOffset(new Date()), events })
-      for (const d of res.drafts) {
-        try {
-          store.append(d, caregiver)
-        } catch {
-          // Already logged; the reply still answers the question.
-        }
-      }
-      setEvents(store.list())
-      setAnswer(res.reply)
-      setQuestion('')
-    } catch {
-      setAnswer('The assistant is offline right now. Logging still works.')
+      // The API accepts at most 500 events; the latest matter most.
+      const res = await callAgent({
+        mode: 'chat',
+        prompt: q,
+        now: isoWithOffset(new Date(nowMs())),
+        events: events.slice(-500),
+      })
+      const { added } = await logAll(res.drafts)
+      setOnline(true)
+      setChat((c) => [
+        ...c,
+        {
+          role: 'agent',
+          text: res.reply,
+          logged: added.map((e) => eventTitle(e, unit)),
+        },
+      ])
+    } catch (err) {
+      setOnline(false)
+      setChat((c) => [
+        ...c,
+        {
+          role: 'agent',
+          text: `The agent is not available (${err instanceof Error ? err.message : 'network error'}). Logging, the timeline and the handoff still work without it.`,
+        },
+      ])
     } finally {
       setAsking(false)
     }
   }
 
-  function changeCaregiver(name: string) {
-    setCaregiver(name)
-    try {
-      localStorage.setItem(CAREGIVER_KEY, name)
-    } catch {
-      // Private mode: keep it for this session only.
+  async function share(title: string, body: string) {
+    if (navigator.share) {
+      await navigator.share({ title, text: body }).catch(() => {})
+    } else {
+      await navigator.clipboard?.writeText(body)
+      setToast({ text: 'Copied to clipboard' })
     }
   }
 
-  async function shareHandoff() {
-    const body = handoffText(brief)
-    if (navigator.share) await navigator.share({ title: 'Baby handoff', text: body }).catch(() => {})
-    else await navigator.clipboard?.writeText(body)
+  function setSetting(key: 'baby' | 'birth' | 'caregiver', value: string) {
+    if (key === 'baby') setBaby(value)
+    if (key === 'birth') setBirth(value)
+    if (key === 'caregiver') setCaregiver(value)
+    void store.setSetting(key, value)
   }
 
-  const today = [...events].reverse().slice(0, 30)
+  function changeUnit(u: Unit) {
+    setUnit(u)
+    void store.setSetting('unit', u)
+  }
+
+  function changeTimer(t: NursingTimer) {
+    setTimer(t)
+    setNow(nowMs())
+    void store.setSetting('nursing', JSON.stringify(t))
+  }
+
+  function openLog(t: LogTab) {
+    setLogTab(t)
+    setTab('log')
+  }
+
+  const pageName = {
+    today: 'Today',
+    timeline: 'Timeline',
+    log: 'Log',
+    analytics: 'Analytics',
+    agent: 'Agent',
+    profile: 'Profile',
+  }[tab]
 
   return (
-    <main>
-      <header>
-        <h1>Calendaby</h1>
-        <label>
-          Logging as{' '}
-          <input value={caregiver} onChange={(e) => changeCaregiver(e.target.value)} size={8} />
-        </label>
+    <div className="app">
+      <header className="topbar">
+        <div className="topbar-left">
+          <span className="logo" aria-hidden="true">
+            <LogoIcon />
+          </span>
+          <button type="button" className="baby-switch" onClick={() => setTab('profile')} aria-label="Baby profile">
+            <b>
+              {baby}
+              {age ? ` • ${age}` : ''}
+            </b>
+            <span>{pageName}</span>
+          </button>
+        </div>
+        <div className="topbar-right">
+          <button type="button" className="avatar" aria-label={`Caregiver: ${caregiver}`} onClick={() => setTab('profile')}>
+            {caregiver.slice(0, 1).toUpperCase()}
+          </button>
+        </div>
       </header>
+      {!store.persistent && <p className="warning">Not saved: entries are kept only when the app is opened over https or localhost.</p>}
 
-      <section className="status">
-        <strong>{brief.headline}</strong>
-        <span>{brief.lines[0]}</span>
-      </section>
+      <main>
+        {tab === 'today' && (
+          <Today
+            baby={baby}
+            now={now}
+            unit={unit}
+            current={current}
+            asleep={asleep}
+            lastDone={lastDone}
+            napsToday={day.naps}
+            day={day}
+            forecast={forecast}
+            lastFeed={lastOf('feed')}
+            lastDiaper={lastOf('diaper')}
+            lastMed={lastOf('med')}
+            brief={brief}
+            text={text}
+            onText={setText}
+            onSubmitText={() => void logText()}
+            speech={speech}
+            onToggleSleep={toggleSleep}
+            onQuick={openLog}
+            onFullStats={() => setTab('analytics')}
+            onShareHandoff={() => setSheet('handoff')}
+            onAsk={() => setTab('agent')}
+          />
+        )}
+        {tab === 'log' && (
+          <Logger
+            baby={baby}
+            now={now}
+            unit={unit}
+            tab={logTab}
+            onTab={setLogTab}
+            onUnit={changeUnit}
+            asleep={asleep}
+            current={current}
+            awakeSince={asleep ? undefined : lastDone?.end}
+            timer={timer}
+            onTimer={changeTimer}
+            onSave={(drafts) => void quickLog(...drafts)}
+            onToggleSleep={toggleSleep}
+          />
+        )}
+        {tab === 'timeline' && <Timeline events={events} now={now} unit={unit} baby={baby} onDelete={(list) => void remove(list)} />}
+        {tab === 'analytics' && (
+          <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
+        )}
+        {tab === 'agent' && <Agent baby={baby} chat={chat} busy={asking} online={online} onSend={(q) => void ask(q)} />}
+        {tab === 'profile' && (
+          <Profile
+            now={now}
+            baby={baby}
+            birth={birth}
+            caregiver={caregiver}
+            unit={unit}
+            persistent={store.persistent}
+            onSetting={setSetting}
+            onUnit={changeUnit}
+            onHandoff={() => setSheet('handoff')}
+          />
+        )}
+      </main>
 
-      <form
-        className="capture"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void log()
-        }}
-      >
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="fed 120 ml at 3, she's down now"
-          rows={2}
-        />
-        <div className="actions">
-          {speech.supported && (
-            <button type="button" onClick={speech.listening ? speech.stop : speech.start}>
-              {speech.listening ? 'Stop' : 'Speak'}
+      <nav className="nav" aria-label="Main">
+        <button type="button" aria-current={tab === 'today'} onClick={() => setTab('today')}>
+          <ClockIcon />
+          Today
+        </button>
+        <button type="button" aria-current={tab === 'timeline'} onClick={() => setTab('timeline')}>
+          <ListIcon />
+          Timeline
+        </button>
+        <button type="button" className="fab" aria-current={tab === 'log'} onClick={() => setTab('log')}>
+          <PlusIcon />
+          Log
+        </button>
+        <button type="button" aria-current={tab === 'analytics'} onClick={() => setTab('analytics')}>
+          <ChartIcon />
+          Analytics
+        </button>
+        <button type="button" aria-current={tab === 'agent'} onClick={() => setTab('agent')}>
+          <SparkIcon />
+          Agent
+        </button>
+      </nav>
+
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.text}</span>
+          {toast.undo && (
+            <button type="button" onClick={() => void undo(toast.undo ?? [])}>
+              Undo
             </button>
           )}
-          <button type="submit">Log it</button>
         </div>
-        {messages.map((m) => (
-          <p key={m} className="hint">
-            {m}
-          </p>
-        ))}
-      </form>
+      )}
 
-      <form
-        className="capture"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void ask()
-        }}
-      >
-        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask: how much has she eaten today?" />
-        <div className="actions">
-          <button type="submit" disabled={asking}>
-            {asking ? 'Thinking...' : 'Ask'}
-          </button>
-        </div>
-        {answer && <p className="answer">{answer}</p>}
-      </form>
-
-      <section>
-        <div className="row">
-          <h2>Handoff</h2>
-          <button type="button" onClick={() => setShowHandoff((s) => !s)}>
-            {showHandoff ? 'Hide' : 'Show'}
-          </button>
-          {showHandoff && (
-            <button type="button" onClick={() => void shareHandoff()}>
-              Share
+      {sheet === 'handoff' && (
+        <Sheet
+          title="Handoff"
+          onClose={() => setSheet(null)}
+          footer={
+            <button type="button" className="pill primary wide tall" onClick={() => void share('Baby handoff', handoffText(brief))}>
+              <ShareIcon width={20} height={20} /> Share handoff
             </button>
-          )}
-        </div>
-        {showHandoff && <pre className="handoff">{handoffText(brief)}</pre>}
-      </section>
-
-      <section>
-        <h2>Recent</h2>
-        {today.length === 0 && <p className="hint">Nothing logged yet.</p>}
-        <ul className="timeline">
-          {today.map((e) => (
-            <li key={e.id}>
-              <time>{new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
-              <span>{describe(e)}</span>
-              <small>{e.loggedBy}</small>
-              <button
-                type="button"
-                aria-label="Delete"
-                onClick={() => {
-                  store.remove(e.id)
-                  setEvents(store.list())
-                }}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+          }
+        >
+          <section className="card handoff">
+            <p className="eyebrow">Handing over from {caregiver}</p>
+            <h2>{brief.headline}</h2>
+            <ul>
+              {brief.lines.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+          </section>
+        </Sheet>
+      )}
+    </div>
   )
 }

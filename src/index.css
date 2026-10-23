@@ -1,26 +1,71 @@
+/* "Nocturne Care" design system from the Stitch export: warm cream surfaces, lavender primary, sage for sleep. */
 :root {
-  --text: #1d1b22;
-  --muted: #6b6375;
-  --bg: #f7f6f2;
-  --card: #fff;
-  --border: #e5e4e7;
-  --accent: #2f6f5e;
-  --accent-text: #fff;
-  font: 16px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
+  --bg: #fff8f8;
+  --surface: #ffffff;
+  --surface-low: #fbf1f2;
+  --surface-mid: #f5eced;
+  --surface-high: #efe6e7;
+  --oat: #f7f2ec;
+  --text: #1e1b1c;
+  --text-2: #4a4453;
+  --muted: #7b7484;
+  --line: rgb(35 31 32 / 0.06);
+  --primary: #4f1c9e;
+  --primary-2: #673ab7;
+  --on-primary: #ffffff;
+  --lilac: #ebddff;
+  --lilac-2: #d3bbff;
+  --lilac-thread: #d1c4e9;
+  --on-lilac: #250059;
+  --sage: #91f78e;
+  --sage-soft: #e8f5e9;
+  --sage-2: #81c784;
+  --sage-text: #006e1c;
+  --on-sage: #002204;
+  --danger: #ba1a1a;
+  --shadow: 0 8px 24px -4px rgb(103 58 183 / 0.06), 0 2px 6px -1px rgb(35 31 32 / 0.03);
+  --shadow-up: 0 12px 32px -4px rgb(103 58 183 / 0.16);
+  --nap-gradient: linear-gradient(135deg, #f3e5f5 0%, #f6f0fb 50%, #e8f5e9 100%);
+  --r-card: 24px;
+  --r-tile: 20px;
+  font: 16px/1.5 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   color: var(--text);
   background: var(--bg);
-  color-scheme: light dark;
+  color-scheme: light;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Night feeds: same hierarchy, dimmed, no pure white. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #ecebef;
-    --muted: #a39dab;
-    --bg: #15141a;
-    --card: #1f1d25;
-    --border: #34313c;
-    --accent: #6fbfa6;
-    --accent-text: #0d1f1a;
+    --bg: #16131a;
+    --surface: #211d26;
+    --surface-low: #1c1820;
+    --surface-mid: #2a2530;
+    --surface-high: #332d3a;
+    --oat: #2a2530;
+    --text: #efe7f2;
+    --text-2: #cbc0d6;
+    --muted: #9a90a6;
+    --line: rgb(255 255 255 / 0.07);
+    --primary: #d3bbff;
+    --primary-2: #b997ff;
+    --on-primary: #250059;
+    --lilac: #3a2d55;
+    --lilac-2: #57449a;
+    --lilac-thread: #3d3450;
+    --on-lilac: #ebddff;
+    --sage: #78dc77;
+    --sage-soft: #1d3320;
+    --sage-2: #4f9a52;
+    --sage-text: #94f990;
+    --on-sage: #002204;
+    --danger: #ffb4ab;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-up: 0 12px 32px -4px rgb(0 0 0 / 0.5);
+    --nap-gradient: linear-gradient(135deg, #2b2238 0%, #241f2b 50%, #1f2b22 100%);
+    color-scheme: dark;
   }
 }
 
@@ -31,4 +76,27 @@
 body {
   margin: 0;
   background: var(--bg);
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary-2);
+  outline-offset: 2px;
 }

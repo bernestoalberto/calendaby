@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DuplicateEventError, LocalEventStore, MemoryEventStore } from './store'
+import { NodeSqlDriver } from '../db/node-driver.test-util'
+import { DuplicateEventError, LEGACY_KEY, SqliteEventStore } from './store'
 
 class MapStorage implements Storage {
   private m = new Map<string, string>()
@@ -23,37 +24,67 @@ class MapStorage implements Storage {
   }
 }
 
-describe('MemoryEventStore', () => {
-  it('rejects a duplicate logged by the other caregiver a minute later', () => {
-    const store = new MemoryEventStore()
-    store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')
-    expect(() => store.append({ kind: 'feed', at: 1_060_000, method: 'bottle', amountMl: 120 }, 'mom')).toThrow(
+describe('SqliteEventStore', () => {
+  it('rejects a duplicate logged by the other caregiver a minute later', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')
+    await expect(store.append({ kind: 'feed', at: 1_060_000, method: 'bottle', amountMl: 120 }, 'mom')).rejects.toThrow(
       DuplicateEventError,
     )
   })
 
-  it('allows a sleep end right after a sleep start', () => {
-    const store = new MemoryEventStore()
-    store.append({ kind: 'sleep', at: 1_000_000, phase: 'start' }, 'dad')
-    expect(() => store.append({ kind: 'sleep', at: 1_030_000, phase: 'end' }, 'dad')).not.toThrow()
+  it('allows a sleep end right after a sleep start', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.append({ kind: 'sleep', at: 1_000_000, phase: 'start' }, 'dad')
+    await expect(store.append({ kind: 'sleep', at: 1_030_000, phase: 'end' }, 'dad')).resolves.toBeDefined()
   })
 
-  it('rejects impossible amounts', () => {
-    const store = new MemoryEventStore()
-    expect(() => store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 1200 }, 'dad')).toThrow()
-  })
-})
-
-describe('LocalEventStore', () => {
-  it('survives a reload', () => {
-    const storage = new MapStorage()
-    new LocalEventStore(storage).append({ kind: 'diaper', at: 1_000_000, contents: 'wet' }, 'dad')
-    expect(new LocalEventStore(storage).list()).toMatchObject([{ kind: 'diaper', loggedBy: 'dad' }])
+  it('rejects impossible amounts without writing them', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await expect(store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 1200 }, 'dad')).rejects.toThrow()
+    expect(await driver.query('SELECT * FROM events')).toEqual([])
   })
 
-  it('starts empty when stored data is corrupt', () => {
-    const storage = new MapStorage()
-    storage.setItem('calendaby.events.v1', '{nope')
-    expect(new LocalEventStore(storage).list()).toEqual([])
+  it('persists to SQLite and reloads in time order', async () => {
+    const driver = new NodeSqlDriver()
+    const first = await SqliteEventStore.open(driver)
+    await first.append({ kind: 'diaper', at: 2_000_000, contents: 'wet' }, 'dad')
+    await first.append({ kind: 'feed', at: 1_000_000, method: 'breast', side: 'left' }, 'mom')
+    const reopened = await SqliteEventStore.open(driver)
+    expect(reopened.list().map((e) => [e.kind, e.loggedBy])).toEqual([
+      ['feed', 'mom'],
+      ['diaper', 'dad'],
+    ])
+    const [row] = await driver.query<{ kind: string; at: number }>('SELECT kind, at FROM events WHERE kind = ?', ['diaper'])
+    expect(row).toEqual({ kind: 'diaper', at: 2_000_000 })
+  })
+
+  it('deletes events', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    const e = await store.append({ kind: 'diaper', at: 1_000_000, contents: 'dirty' }, 'dad')
+    await store.remove(e.id)
+    expect((await SqliteEventStore.open(driver)).list()).toEqual([])
+  })
+
+  it('moves events from the old localStorage format once and keeps a backup', async () => {
+    const legacy = new MapStorage()
+    const old = [{ id: 'a', at: 1_000_000, loggedBy: 'dad', kind: 'diaper', contents: 'wet' }]
+    legacy.setItem(LEGACY_KEY, JSON.stringify(old))
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver, legacy)
+    const again = await SqliteEventStore.open(driver, legacy)
+    expect(again.list()).toEqual(old)
+    expect(legacy.getItem(LEGACY_KEY)).toBeNull()
+    expect(legacy.getItem(`${LEGACY_KEY}.migrated`)).toBe(JSON.stringify(old))
+  })
+
+  it('stores settings', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    expect(await store.getSetting('caregiver')).toBeUndefined()
+    await store.setSetting('caregiver', 'Ernesto')
+    await store.setSetting('caregiver', 'Dad')
+    expect(await store.getSetting('caregiver')).toBe('Dad')
   })
 })
