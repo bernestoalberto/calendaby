@@ -86,7 +86,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
   const [calBusy, setCalBusy] = useState(false)
   const [calError, setCalError] = useState<string>()
-  const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
+  const speech = useSpeech(
+    (heard) => setText((t) => (t ? `${t}, ${heard}` : heard)),
+    (message) => setToast({ text: message }),
+  )
 
   const fastTick = tab === 'log' || timer.running !== undefined
   useEffect(() => {

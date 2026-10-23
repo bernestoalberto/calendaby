@@ -57,6 +57,8 @@ export default defineConfig({
     vercelApi(),
     VitePWA({
       registerType: 'autoUpdate',
+      // main.tsx registers it, and only in the browser: the native shells bundle their own files.
+      injectRegister: false,
       includeAssets: ['favicon.svg'],
       // Precache the SQLite engine too, so the app opens offline.
       workbox: { globPatterns: ['**/*.{js,css,html,svg,png,wasm}'], maximumFileSizeToCacheInBytes: 3_000_000 },

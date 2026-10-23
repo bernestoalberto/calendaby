@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+import { SpeechRecognition as NativeSpeech } from '@capacitor-community/speech-recognition'
 import { useEffect, useRef, useState } from 'react'
 
 // The Web Speech API is not in the TS DOM lib; type only what we use.
@@ -16,18 +18,53 @@ function getCtor(): RecognitionCtor | undefined {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition
 }
 
-/** Voice capture for the PWA. Native builds can swap in a Capacitor speech plugin behind the same shape. */
-export function useSpeech(onText: (text: string) => void) {
+const native = Capacitor.isNativePlatform()
+
+/** Voice capture: the Web Speech API in the PWA, the device recognizer in the Android and iOS shells (WebView has none). */
+export function useSpeech(onText: (text: string) => void, onProblem?: (message: string) => void) {
   const [listening, setListening] = useState(false)
+  const [nativeReady, setNativeReady] = useState(false)
   const rec = useRef<Recognition | null>(null)
   const onTextRef = useRef(onText)
+  const onProblemRef = useRef(onProblem)
   useEffect(() => {
     onTextRef.current = onText
-  }, [onText])
+    onProblemRef.current = onProblem
+  }, [onText, onProblem])
 
-  const Ctor = getCtor()
+  useEffect(() => {
+    if (!native) return
+    NativeSpeech.available().then(
+      ({ available }) => setNativeReady(available),
+      () => setNativeReady(false),
+    )
+  }, [])
+
+  const Ctor = native ? undefined : getCtor()
+
+  async function startNative() {
+    const access = await NativeSpeech.requestPermissions()
+    if (access.speechRecognition !== 'granted') {
+      onProblemRef.current?.('Allow microphone access in Settings to log by voice.')
+      return
+    }
+    setListening(true)
+    try {
+      const { matches } = await NativeSpeech.start({ language: navigator.language || 'en-US', partialResults: false, popup: false })
+      const heard = matches?.[0]?.trim()
+      if (heard) onTextRef.current(heard)
+    } catch {
+      onProblemRef.current?.("Couldn't hear that. Try again.")
+    } finally {
+      setListening(false)
+    }
+  }
 
   function start() {
+    if (native) {
+      void startNative()
+      return
+    }
     if (!Ctor) return
     const r = new Ctor()
     r.lang = navigator.language || 'en-US'
@@ -46,8 +83,9 @@ export function useSpeech(onText: (text: string) => void) {
   }
 
   function stop() {
-    rec.current?.stop()
+    if (native) void NativeSpeech.stop().catch(() => undefined)
+    else rec.current?.stop()
   }
 
-  return { supported: Boolean(Ctor), listening, start, stop }
+  return { supported: native ? nativeReady : Boolean(Ctor), listening, start, stop }
 }
