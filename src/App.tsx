@@ -428,6 +428,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         {tab === 'calendar' && (
           <Calendar
             signedIn={account.signedIn === true}
+            onSignIn={account.requestSignIn}
             now={now}
             agenda={agenda}
             pending={pending}

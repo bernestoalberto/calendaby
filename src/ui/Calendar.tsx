@@ -5,6 +5,7 @@ import { CheckIcon, CloseIcon } from './icons'
 
 interface Props {
   signedIn: boolean
+  onSignIn?: () => void
   now: number
   agenda: AgendaItem[]
   pending: Appointment[]
@@ -28,6 +29,11 @@ export function Calendar(p: Readonly<Props>) {
       <div className="stack">
         <h2 className="page-title">Calendar</h2>
         <p className="muted">Sign in with Google to see doctor appointments and your calendar here.</p>
+        {p.onSignIn && (
+          <button type="button" className="pill" onClick={p.onSignIn}>
+            Sign in with Google
+          </button>
+        )}
       </div>
     )
   }
