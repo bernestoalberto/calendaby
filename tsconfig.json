@@ -5,6 +5,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
+    "types": ["node"],
     "skipLibCheck": true
   },
   "files": [],
