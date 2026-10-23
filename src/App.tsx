@@ -4,9 +4,17 @@ import { callAgent, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
 import { napForecast } from './domain/analytics'
 import type { BabyEvent, DraftEvent } from './domain/events'
+import { napAlerts } from './domain/notifications'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
+import {
+  notificationAccess,
+  requestNotificationAccess,
+  sendTestNotification,
+  syncNapNotifications,
+  type NotificationAccess,
+} from './notifications'
 import { Analytics } from './ui/Analytics'
 import { Agent, type Chat } from './ui/Agent'
 import { Sheet } from './ui/controls'
@@ -50,6 +58,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [baby, setBaby] = useState('Baby')
   const [birth, setBirth] = useState('')
   const [unit, setUnit] = useState<Unit>('oz')
+  const [reminders, setReminders] = useState(false)
+  const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
   const [tab, setTab] = useState<Tab>('today')
   const [logTab, setLogTab] = useState<LogTab>('feed')
@@ -73,7 +83,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('baby').then((v) => v && setBaby(v))
     void store.getSetting('birth').then((v) => v && setBirth(v))
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
+    void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
+    void notificationAccess().then(setNotifAccess)
   }, [store])
 
   useEffect(() => {
@@ -91,6 +103,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
   const lastOf = (kind: BabyEvent['kind']) => [...events].reverse().find((e) => e.kind === kind)
   const age = birth ? babyAge(birth, now) : undefined
+  const nextNapAt = forecast?.nextNapAt
+
+  useEffect(() => {
+    const active = reminders && notifAccess === 'granted'
+    void syncNapNotifications(active, active ? napAlerts(baby, forecast, asleep, nowMs()) : [])
+  }, [reminders, notifAccess, baby, asleep, nextNapAt, forecast])
 
   function refresh() {
     setEvents(store.list())
@@ -217,6 +235,29 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.setSetting('unit', u)
   }
 
+  async function toggleReminders() {
+    if (reminders) {
+      setReminders(false)
+      await store.setSetting('reminders', 'off')
+      setToast({ text: 'Nap reminders turned off' })
+      return
+    }
+    const access = await requestNotificationAccess()
+    setNotifAccess(access)
+    if (access !== 'granted') {
+      setToast({ text: 'Allow notifications in your device or browser settings first' })
+      return
+    }
+    setReminders(true)
+    await store.setSetting('reminders', 'on')
+    setToast({ text: `Nap reminders enabled for ${baby}` })
+  }
+
+  async function testReminder() {
+    const ok = await sendTestNotification(baby)
+    setToast({ text: ok ? 'Test notification sent' : 'Notifications are not allowed' })
+  }
+
   function changeTimer(t: NursingTimer) {
     setTimer(t)
     setNow(nowMs())
@@ -317,8 +358,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             caregiver={caregiver}
             unit={unit}
             persistent={store.persistent}
+            reminders={reminders}
+            notifAccess={notifAccess}
             onSetting={setSetting}
             onUnit={changeUnit}
+            onToggleReminders={() => void toggleReminders()}
+            onTestReminder={() => void testReminder()}
             onHandoff={() => setSheet('handoff')}
           />
         )}

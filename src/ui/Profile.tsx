@@ -1,5 +1,6 @@
-import { Segmented } from './controls'
-import { FaceIcon, ShareIcon } from './icons'
+import type { NotificationAccess } from '../notifications'
+import { Badge, Segmented } from './controls'
+import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { babyAge, type Unit } from './time'
 
 interface Props {
@@ -9,8 +10,12 @@ interface Props {
   caregiver: string
   unit: Unit
   persistent: boolean
+  reminders: boolean
+  notifAccess: NotificationAccess
   onSetting: (key: 'baby' | 'birth' | 'caregiver', value: string) => void
   onUnit: (u: Unit) => void
+  onToggleReminders: () => void
+  onTestReminder: () => void
   onHandoff: () => void
 }
 
@@ -53,6 +58,42 @@ export function Profile(p: Props) {
         <button type="button" className="pill quiet wide" onClick={p.onHandoff}>
           <ShareIcon width={18} height={18} /> Hand off to the next caregiver
         </button>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h3>
+            <MoonIcon width={18} height={18} /> Nap Reminders
+          </h3>
+          <Badge tone={p.reminders && p.notifAccess === 'granted' ? 'sage' : 'oat'}>
+            {p.notifAccess === 'unsupported'
+              ? 'Unavailable'
+              : p.notifAccess === 'denied'
+                ? 'Blocked'
+                : p.reminders
+                  ? 'On'
+                  : 'Off'}
+          </Badge>
+        </div>
+        <p className="muted">
+          Notifies you 15 minutes before {p.baby}'s predicted nap and when nap time arrives.
+          {p.notifAccess === 'denied' ? ' Allow notifications in your device or browser settings to turn this on.' : ''}
+        </p>
+        <div className="card-foot">
+          <button
+            type="button"
+            className={p.reminders ? 'pill quiet' : 'pill primary'}
+            disabled={p.notifAccess === 'unsupported'}
+            onClick={p.onToggleReminders}
+          >
+            {p.reminders ? 'Turn off reminders' : 'Enable nap reminders'}
+          </button>
+          {p.reminders && p.notifAccess === 'granted' && (
+            <button type="button" className="link strong" onClick={p.onTestReminder}>
+              Test alert
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="card">

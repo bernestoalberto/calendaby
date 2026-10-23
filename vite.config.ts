@@ -10,8 +10,9 @@ function vercelApi(): Plugin {
     configureServer(server) {
       // Server-side settings (MODEL_NAME, OPENROUTER_API_KEY) from .env.local, for the dev functions only; never bundled.
       Object.assign(process.env, loadEnv(server.config.mode, process.cwd(), ''))
+      const backendApp = server.ssrLoadModule('/backend/app.ts')
       server.middlewares.use('/api/backend', async (req, res) => {
-        const { createApp, sharedDb } = await server.ssrLoadModule('/backend/app.ts')
+        const { createApp, sharedDb } = await backendApp
         const chunks: Buffer[] = []
         for await (const chunk of req) chunks.push(chunk as Buffer)
         const out: Response = await createApp(sharedDb()).fetch(
@@ -71,10 +72,19 @@ export default defineConfig({
   ],
   // SQLite WASM loads its own .wasm file; pre-bundling breaks that.
   optimizeDeps: {
+    entries: ['index.html'],
     exclude: ['@sqlite.org/sqlite-wasm'],
+  },
+  server: {
+    watch: {
+      ignored: ['**/android/**', '**/ios/**', '**/_*/**'],
+    },
   },
   worker: {
     format: 'es',
+  },
+  ssr: {
+    external: true,
   },
   test: {
     environment: 'node',

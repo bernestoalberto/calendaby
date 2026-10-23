@@ -2,7 +2,7 @@
 
 ## Built
 
-- PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input.
+- PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input, and on-device nap notifications (15 min before predicted nap and at nap time).
 - Capacitor Android and iOS projects generated (`android/` and `ios/`, synced with `npm run cap:sync`); CI builds `calendaby-debug-apk`.
 - Hybrid capture: the rules parser handles what it can on the phone; leftovers go to the agent.
 - `backend/`: Hono routes on SQLite (`node:sqlite`), one POST route per operationId (`recordEvents`, `listEvents`).
