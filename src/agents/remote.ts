@@ -31,7 +31,9 @@ export function isoWithOffset(d: Date): string {
 }
 
 export async function callAgent(body: AgentRequest, fetchImpl: typeof fetch = fetch): Promise<AgentResponse> {
-  const res = await fetchImpl('/api/agent', {
+  const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+  const url = cap?.isNativePlatform?.() ? 'https://calendaby.vercel.app/api/agent' : '/api/agent'
+  const res = await fetchImpl(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

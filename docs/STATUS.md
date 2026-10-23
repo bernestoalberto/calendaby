@@ -3,7 +3,7 @@
 ## Built
 
 - PWA with conversational logging, duplicate guard, handoff brief, Ask box, voice input.
-- Capacitor config for iOS and Android (native projects not generated yet).
+- Capacitor Android project generated (`android/`, synced with `npm run cap:sync`); CI builds `calendaby-debug-apk`.
 - Hybrid capture: the rules parser handles what it can on the phone; leftovers go to the agent.
 - `backend/`: Hono routes on SQLite (`node:sqlite`), one POST route per operationId (`recordEvents`, `listEvents`).
 - `agent/agent.ts`: capture and chat modes. `listEvents` is a backend operation used as a tool. Each agent call first syncs the app's events into the backend.
