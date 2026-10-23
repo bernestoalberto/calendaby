@@ -8,6 +8,7 @@
 - `backend/`: Hono routes on SQLite (`node:sqlite`), one POST route per operationId (`recordEvents`, `listEvents`).
 - `agent/agent.ts`: capture and chat modes. `listEvents` and `getPredictions` (deduced sleep, feed, diaper, and 7-day trend insights) are tools available to the chat agent. Each agent call first syncs the app's events into the backend.
 - Model from `MODEL_NAME`: OpenRouter, default `openai/gpt-6-luna`.
+- Clerk sign-in is required when `VITE_CLERK_PUBLISHABLE_KEY` is set (`src/ui/AuthGate.tsx`); without the key the app runs signed out. The caregiver name defaults to the account's first name, and "Continue without signing in" appears if Clerk can't load (offline). With `CLERK_SECRET_KEY` set, `/api/agent` and `/api/backend/*` require a Clerk session token (401 otherwise); without it the API stays open as before. Logging works signed out. Calendar tab: Sync Gmail, confirm or dismiss proposals, and a two-week agenda (confirmed visits plus Google Calendar) that flags clashes with the predicted nap or feed. Confirmed visits are cached on the device and schedule reminders (day before, 2 hours before, time to leave) when reminders are on. Backend Gmail appointment import is built (`importAppointments`, `listAppointments`, `setAppointmentStatus`; proposals only, the parent confirms). See `docs/PLAN_CLERK.md`.
 - Husky pre-commit runs `npm run check` (lint, build, tests including a dev-server smoke test).
 - `agent/*.py`, `agent/tests` and `agent/uv.lock` are the old Python agent and can be deleted.
 
@@ -27,5 +28,5 @@ In PowerShell, `npm run dev -- --host` fails; use `npx vite --host`.
 
 - The app still writes to its own SQLite; the backend only receives events when the agent is called. Full sync and sign-in are next.
 - A SQLite file on Vercel does not persist; hosted storage needs Turso or Postgres.
-- `/api/agent` has no sign-in, so keep it off the public internet.
+- `/api/agent` is open unless `CLERK_SECRET_KEY` is set; set it on Vercel before going public.
 - The rules parser misses some phrasings it doesn't flag as unclear ("about 60" without ml).

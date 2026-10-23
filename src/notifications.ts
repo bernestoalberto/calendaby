@@ -1,6 +1,9 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
+import { APPT_ID_BASE, APPT_ID_COUNT } from './domain/appointmentAlerts'
 import { ALL_ALERT_IDS, type NapAlert } from './domain/notifications'
+
+const CANCEL_IDS = [...ALL_ALERT_IDS, ...Array.from({ length: APPT_ID_COUNT }, (_, i) => APPT_ID_BASE + i)]
 
 export type NotificationAccess = 'granted' | 'denied' | 'prompt' | 'unsupported'
 
@@ -65,7 +68,7 @@ export async function syncNapNotifications(enabled: boolean, alerts: NapAlert[])
   clearWebTimers()
   if (Capacitor.isNativePlatform()) {
     try {
-      await LocalNotifications.cancel({ notifications: ALL_ALERT_IDS.map((id) => ({ id })) })
+      await LocalNotifications.cancel({ notifications: CANCEL_IDS.map((id) => ({ id })) })
       if (!enabled || alerts.length === 0) return
       const { display } = await LocalNotifications.checkPermissions()
       if (display !== 'granted') return

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildHandoff, handoffText } from './agents/handoff'
-import { callAgent, HybridCaptureAgent, isoWithOffset } from './agents/remote'
+import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
+import { appointmentAlerts } from './domain/appointmentAlerts'
+import { Appointment as AppointmentSchema, type Appointment } from './domain/appointments'
+import { buildAgenda, type CalendarEvent } from './domain/calendar'
 import { napForecast } from './domain/analytics'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { smartAlerts } from './domain/notifications'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
-import { deduceInsights } from './domain/predictions'
+import { deduceInsights, feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
 import {
@@ -16,10 +19,12 @@ import {
   syncNapNotifications,
   type NotificationAccess,
 } from './notifications'
+import { useAccount } from './ui/accountContext'
 import { Analytics } from './ui/Analytics'
 import { Agent, type Chat } from './ui/Agent'
+import { Calendar } from './ui/Calendar'
 import { Sheet } from './ui/controls'
-import { ChartIcon, ClockIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon } from './ui/icons'
+import { ClockIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
 import { Logger, type LogTab } from './ui/Logger'
 import { Profile } from './ui/Profile'
@@ -32,7 +37,8 @@ import './App.css'
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
-type Tab = 'today' | 'timeline' | 'log' | 'analytics' | 'agent' | 'profile'
+type Tab = 'today' | 'timeline' | 'log' | 'analytics' | 'calendar' | 'agent' | 'profile'
+const TWO_WEEKS = 14 * 24 * 3_600_000
 type Toast = { text: string; undo?: BabyEvent[] }
 
 let opened: Promise<SqliteEventStore> | undefined
@@ -54,6 +60,7 @@ export default function App() {
 }
 
 function Tracker({ store }: { store: SqliteEventStore }) {
+  const account = useAccount()
   const [events, setEvents] = useState(() => store.list())
   const [caregiver, setCaregiver] = useState('Dad')
   const [baby, setBaby] = useState('Baby')
@@ -71,6 +78,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [asking, setAsking] = useState(false)
   const [online, setOnline] = useState<boolean>()
   const [now, setNow] = useState(nowMs)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
+  const [calBusy, setCalBusy] = useState(false)
+  const [calError, setCalError] = useState<string>()
   const speech = useSpeech((heard) => setText((t) => (t ? `${t}, ${heard}` : heard)))
 
   const fastTick = tab === 'log' || timer.running !== undefined
@@ -80,14 +91,24 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   }, [fastTick])
 
   useEffect(() => {
-    void store.getSetting('caregiver').then((v) => v && setCaregiver(v))
+    void store.getSetting('caregiver').then((v) => {
+      if (v) setCaregiver(v)
+      else if (account.name) {
+        setCaregiver(account.name)
+        void store.setSetting('caregiver', account.name)
+      }
+    })
     void store.getSetting('baby').then((v) => v && setBaby(v))
     void store.getSetting('birth').then((v) => v && setBirth(v))
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
+    void store.getSetting('appointments').then((v) => {
+      const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
+      if (parsed.success) setAppointments(parsed.data)
+    })
     void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
     void notificationAccess().then(setNotifAccess)
-  }, [store])
+  }, [store, account.name])
 
   useEffect(() => {
     if (!toast) return
@@ -100,6 +121,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
   const insights = useMemo(() => deduceInsights(events, baby, now), [events, baby, now])
+  const agenda = useMemo(
+    () => buildAgenda(appointments, calEvents, sleepForecast(events, now), feedForecast(events, now), now),
+    [appointments, calEvents, events, now],
+  )
+  const pending = useMemo(() => appointments.filter((a) => a.status === 'proposed' || a.status === 'review'), [appointments])
   const current = sessions.at(-1)
   const asleep = current !== undefined && current.end === undefined
   const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
@@ -108,8 +134,52 @@ function Tracker({ store }: { store: SqliteEventStore }) {
 
   useEffect(() => {
     const active = reminders && notifAccess === 'granted'
-    void syncNapNotifications(active, active ? smartAlerts(baby, events, nowMs()) : [])
-  }, [reminders, notifAccess, baby, events])
+    const at = nowMs()
+    const alerts = active ? [...smartAlerts(baby, events, at), ...appointmentAlerts(baby, appointments, events, at)] : []
+    void syncNapNotifications(active, alerts)
+  }, [reminders, notifAccess, baby, events, appointments])
+
+  async function loadCalendar() {
+    const from = nowMs()
+    try {
+      const list = await callBackend<Appointment[]>('listAppointments', {})
+      setAppointments(list)
+      void store.setSetting('appointments', JSON.stringify(list))
+      setCalEvents(await callBackend<CalendarEvent[]>('listCalendar', { from, to: from + TWO_WEEKS }))
+      setCalError(undefined)
+    } catch (err) {
+      setCalError(err instanceof Error ? `Couldn't load your calendar (${err.message}).` : "Couldn't load your calendar.")
+    }
+  }
+
+  async function syncGmail() {
+    setCalBusy(true)
+    try {
+      await callBackend('importAppointments', { now: isoWithOffset(new Date(nowMs())) })
+      await loadCalendar()
+    } catch (err) {
+      setCalError(err instanceof Error ? `Couldn't read Gmail (${err.message}).` : "Couldn't read Gmail.")
+    } finally {
+      setCalBusy(false)
+    }
+  }
+
+  async function decide(id: string, status: 'confirmed' | 'dismissed') {
+    await callBackend('setAppointmentStatus', { id, status }).catch(() => undefined)
+    await loadCalendar()
+  }
+
+  useEffect(() => {
+    if (account.signedIn && tab === 'calendar') void loadCalendar()
+    else if (account.signedIn) void callBackend<Appointment[]>('listAppointments', {}).then(
+      (list) => {
+        setAppointments(list)
+        void store.setSetting('appointments', JSON.stringify(list))
+      },
+      () => undefined,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.signedIn, tab])
 
   function refresh() {
     setEvents(store.list())
@@ -275,6 +345,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     timeline: 'Timeline',
     log: 'Log',
     analytics: 'Analytics',
+    calendar: 'Calendar',
     agent: 'Agent',
     profile: 'Profile',
   }[tab]
@@ -354,6 +425,18 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         {tab === 'analytics' && (
           <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
         )}
+        {tab === 'calendar' && (
+          <Calendar
+            signedIn={account.signedIn === true}
+            now={now}
+            agenda={agenda}
+            pending={pending}
+            busy={calBusy}
+            error={calError}
+            onSync={() => void syncGmail()}
+            onDecide={(id, status) => void decide(id, status)}
+          />
+        )}
         {tab === 'agent' && <Agent baby={baby} chat={chat} busy={asking} online={online} onSend={(q) => void ask(q)} />}
         {tab === 'profile' && (
           <Profile
@@ -387,9 +470,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           <PlusIcon />
           Log
         </button>
-        <button type="button" aria-current={tab === 'analytics'} onClick={() => setTab('analytics')}>
-          <ChartIcon />
-          Analytics
+        <button type="button" aria-current={tab === 'calendar'} onClick={() => setTab('calendar')}>
+          <TodayIcon />
+          Calendar
         </button>
         <button type="button" aria-current={tab === 'agent'} onClick={() => setTab('agent')}>
           <SparkIcon />

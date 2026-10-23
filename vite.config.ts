@@ -2,7 +2,9 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { gmailImporter } from './agent/appointments.ts'
 import { createApp, sharedDb } from './backend/app.ts'
+import { userCalendar } from './backend/calendar.ts'
 
 /** Local dev: serve /api/agent with the same function Vercel runs, so no second process is needed. */
 function vercelApi(): Plugin {
@@ -14,9 +16,10 @@ function vercelApi(): Plugin {
       server.middlewares.use('/api/backend', async (req, res) => {
         const chunks: Buffer[] = []
         for await (const chunk of req) chunks.push(chunk as Buffer)
-        const out: Response = await createApp(sharedDb()).fetch(
+        const out: Response = await createApp(sharedDb(), { importer: gmailImporter, calendar: userCalendar }).fetch(
           new Request(`http://localhost${req.url ?? '/'}`, {
             method: req.method,
+            headers: { authorization: req.headers.authorization ?? '' },
             body: req.method === 'POST' ? Buffer.concat(chunks) : undefined,
           }),
         )
@@ -31,7 +34,11 @@ function vercelApi(): Plugin {
         const out: Response = await POST(
           new Request(`http://localhost${req.url ?? ''}`, {
             method: req.method,
-            headers: { 'content-type': 'application/json', origin: req.headers.origin ?? '' },
+            headers: {
+              'content-type': 'application/json',
+              origin: req.headers.origin ?? '',
+              authorization: req.headers.authorization ?? '',
+            },
             body: req.method === 'POST' ? Buffer.concat(chunks) : undefined,
           }),
         )
@@ -87,6 +94,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    setupFiles: ['backend/test-setup.ts'],
     exclude: ['node_modules', 'dist', 'e2e', '_*'],
   },
 })

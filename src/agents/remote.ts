@@ -30,16 +30,34 @@ export function isoWithOffset(d: Date): string {
   )
 }
 
-export async function callAgent(body: AgentRequest, fetchImpl: typeof fetch = fetch): Promise<AgentResponse> {
+type TokenSource = () => Promise<string | null>
+let tokenSource: TokenSource | undefined
+
+/** Set by the Account card once Clerk is ready; stays unset (signed out) otherwise. */
+export function setAgentTokenSource(source: TokenSource | undefined): void {
+  tokenSource = source
+}
+
+async function post(path: string, body: unknown, fetchImpl: typeof fetch): Promise<Response> {
   const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-  const url = cap?.isNativePlatform?.() ? 'https://calendaby.vercel.app/api/agent' : '/api/agent'
-  const res = await fetchImpl(url, {
+  const base = cap?.isNativePlatform?.() ? 'https://calendaby.vercel.app' : ''
+  const token = await tokenSource?.().catch(() => null)
+  const res = await fetchImpl(`${base}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`Agent returned ${res.status}`)
-  return AgentResponse.parse(await res.json())
+  if (!res.ok) throw new Error(`Server returned ${res.status}`)
+  return res
+}
+
+export async function callAgent(body: AgentRequest, fetchImpl: typeof fetch = fetch): Promise<AgentResponse> {
+  return AgentResponse.parse(await (await post('/api/agent', body, fetchImpl)).json())
+}
+
+/** One backend operation by operationId; the caller validates the shape it expects. */
+export async function callBackend<T>(operationId: string, body: unknown, fetchImpl: typeof fetch = fetch): Promise<T> {
+  return (await (await post(`/api/backend/${operationId}`, body, fetchImpl)).json()) as T
 }
 
 /**
@@ -56,7 +74,7 @@ export class HybridCaptureAgent implements CaptureAgent {
   async capture(text: string, now: Date): Promise<CaptureResult> {
     const local = parseLog(text, now)
     if (local.unsure.length === 0) return local
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return local
+    if ((globalThis as { navigator?: { onLine?: boolean } }).navigator?.onLine === false) return local
 
     try {
       const res = await this.call({ mode: 'capture', prompt: local.unsure.join(', '), now: isoWithOffset(now) })

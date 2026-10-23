@@ -1,4 +1,5 @@
 import type { NotificationAccess } from '../notifications'
+import { Account } from './Account'
 import { Badge, Segmented } from './controls'
 import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { babyAge, type Unit } from './time'
@@ -52,6 +53,8 @@ export function Profile(p: Readonly<Props>) {
           <input type="date" defaultValue={p.birth} max={new Date(p.now).toISOString().slice(0, 10)} onChange={(e) => p.onSetting('birth', e.target.value)} />
         </label>
       </section>
+
+      {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? <Account /> : null}
 
       <section className="card">
         <div className="card-head">

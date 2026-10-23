@@ -1808,3 +1808,10 @@ main {
   bottom: calc(96px + env(safe-area-inset-bottom));
   box-shadow: var(--shadow-up);
 }
+
+.center.auth {
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}

@@ -7,6 +7,7 @@ let base: string
 beforeAll(async () => {
   process.env.DB_PATH = ':memory:'
   server = await createServer({ logLevel: 'silent', server: { port: 0 } })
+  delete process.env.CLERK_SECRET_KEY // the dev server loads .env.local
   await server.listen()
   const address = server.httpServer?.address()
   base = `http://localhost:${typeof address === 'object' && address ? address.port : ''}`
