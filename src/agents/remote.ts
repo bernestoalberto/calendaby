@@ -47,7 +47,10 @@ async function post(path: string, body: unknown, fetchImpl: typeof fetch): Promi
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`Server returned ${res.status}`)
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: unknown } | null
+    throw new Error(typeof detail?.error === 'string' ? detail.error : `Server returned ${res.status}`)
+  }
   return res
 }
 

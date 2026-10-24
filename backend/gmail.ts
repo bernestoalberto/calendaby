@@ -1,5 +1,18 @@
 import { createClerkClient } from '@clerk/backend'
 
+/** A Google problem the parent can fix; the message is safe to show them. Anything else stays a generic failure. */
+export class GoogleError extends Error {}
+
+export function googleStatusError(service: string, status: number): Error {
+  if (status === 401) return new GoogleError('Google access expired. Sign out of Calendaby and sign in again.')
+  if (status === 403) {
+    return new GoogleError(
+      `Google refused ${service} access. Sign in again and allow ${service}; also check that the ${service} API is enabled for the project and your account is a test user.`,
+    )
+  }
+  return new Error(`${service} returned ${status}`)
+}
+
 export interface Mail {
   id: string
   from: string
@@ -47,7 +60,7 @@ function bodyText(payload: Part): string {
 export function gmailMailbox(accessToken: string, fetchImpl: typeof fetch = fetch): Mailbox {
   const get = async <T>(url: string): Promise<T> => {
     const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!res.ok) throw new Error(`Gmail returned ${res.status}`)
+    if (!res.ok) throw googleStatusError('Gmail', res.status)
     return (await res.json()) as T
   }
   return {
@@ -78,6 +91,8 @@ export async function googleAccessToken(userId: string): Promise<string> {
   if (!secretKey) throw new Error('Sign-in is not configured')
   const { data } = await createClerkClient({ secretKey }).users.getUserOauthAccessToken(userId, 'google')
   const token = data[0]?.token
-  if (!token) throw new Error('Google is not connected')
+  if (!token) {
+    throw new GoogleError('Google is not connected to this account. Sign out, then sign in with Google and allow Gmail and Calendar access.')
+  }
   return token
 }

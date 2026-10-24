@@ -1,4 +1,4 @@
-import { googleAccessToken } from './gmail.js'
+import { googleAccessToken, googleStatusError } from './gmail.js'
 
 export interface CalEvent {
   id: string
@@ -31,7 +31,7 @@ export async function listCalendarEvents(
     maxResults: '50',
   })
   const res = await fetchImpl(`${API}?${query}`, { headers: { Authorization: `Bearer ${accessToken}` } })
-  if (!res.ok) throw new Error(`Calendar returned ${res.status}`)
+  if (!res.ok) throw googleStatusError('Calendar', res.status)
   const { items = [] } = (await res.json()) as { items?: GoogleEvent[] }
   const out: CalEvent[] = []
   for (const e of items) {

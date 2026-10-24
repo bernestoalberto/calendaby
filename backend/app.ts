@@ -4,6 +4,7 @@ import type { CalEvent } from './calendar.js'
 import type { Appointment } from '../src/domain/appointments.js'
 import { authenticate, type Verifier } from './auth.js'
 import { openDb, type Db } from './db.js'
+import { GoogleError } from './gmail.js'
 import { operations } from './operations.js'
 
 /** Finds proposed appointments in the user's mail. Injected so tests never touch Gmail or a model. */
@@ -44,7 +45,7 @@ export function createApp(db: Db, { verify, importer, calendar }: AppOptions = {
       return c.json({ found: found.length, added: db.putAppointments(found) })
     } catch (err) {
       console.error('import failed', err)
-      return c.json({ error: 'Could not read Gmail' }, 502)
+      return c.json({ error: err instanceof GoogleError ? err.message : 'Could not read Gmail' }, 502)
     }
   })
   app.post('/listCalendar', async (c) => {
@@ -57,7 +58,7 @@ export function createApp(db: Db, { verify, importer, calendar }: AppOptions = {
       return c.json(await calendar(userId, input.data.from, input.data.to))
     } catch (err) {
       console.error('calendar failed', err)
-      return c.json({ error: 'Could not read Google Calendar' }, 502)
+      return c.json({ error: err instanceof GoogleError ? err.message : 'Could not read Google Calendar' }, 502)
     }
   })
   return app
