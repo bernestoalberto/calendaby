@@ -45,7 +45,7 @@ describe('SqliteEventStore', () => {
   it('seeds activity types in SQLite and keeps edits across reopen', async () => {
     const driver = new NodeSqlDriver()
     const store = await SqliteEventStore.open(driver)
-    expect((await store.listActivityTypes()).map((t) => t.id)).toEqual(['tummy', 'bath', 'outdoor', 'indoor'])
+    expect((await store.listActivityTypes()).map((t) => t.id)).toEqual(['tummy', 'bath', 'outdoor', 'indoor', 'crawl', 'walk', 'swim'])
     await store.addActivityType('Music time')
     const again = await SqliteEventStore.open(driver)
     expect((await again.listActivityTypes()).map((t) => [t.id, t.label]).at(-1)).toEqual(['music-time', 'Music time'])

@@ -7,6 +7,9 @@ export const DEFAULT_ACTIVITY_TYPES: ActivityType[] = [
   { id: 'bath', label: 'Bath' },
   { id: 'outdoor', label: 'Outdoor play' },
   { id: 'indoor', label: 'Indoor play' },
+  { id: 'crawl', label: 'Crawling' },
+  { id: 'walk', label: 'Walking' },
+  { id: 'swim', label: 'Swimming' },
 ]
 
 /** "Music time" becomes "music-time". */

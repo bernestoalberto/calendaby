@@ -50,6 +50,13 @@ describe('parseLog', () => {
     expect(parseLog('played outside for 1 hour', now).drafts[0]).toMatchObject({ type: 'outdoor', durationMin: 60 })
   })
 
+  it('tells physical activities apart from outings', () => {
+    expect(parseLog('crawled 10 min', now).drafts[0]).toMatchObject({ type: 'crawl', durationMin: 10 })
+    expect(parseLog('swimming 20 minutes', now).drafts[0]).toMatchObject({ type: 'swim', durationMin: 20 })
+    expect(parseLog('walking around the house', now).drafts[0]).toMatchObject({ type: 'walk' })
+    expect(parseLog('went for a walk', now).drafts[0]).toMatchObject({ type: 'outdoor' })
+  })
+
   it('does not read "5 min ago" as a duration', () => {
     expect(parseLog('tummy time 5 min ago', now).drafts).toEqual([
       { kind: 'activity', at: now.getTime() - 5 * 60_000, type: 'tummy', durationMin: undefined },

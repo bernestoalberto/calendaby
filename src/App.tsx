@@ -22,12 +22,13 @@ import {
   type NotificationAccess,
 } from './notifications'
 import { useAccount } from './ui/accountContext'
+import { Activity } from './ui/Activity'
 import { Analytics } from './ui/Analytics'
 import { Agent, type Chat } from './ui/Agent'
 import { Calendar } from './ui/Calendar'
 import { Sheet } from './ui/controls'
 import { EditSheet, type EventEdit } from './ui/EditSheet'
-import { ClockIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
+import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
 import { Logger, type LogTab } from './ui/Logger'
 import { Profile } from './ui/Profile'
@@ -40,7 +41,7 @@ import './App.css'
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
-type Tab = 'today' | 'timeline' | 'log' | 'analytics' | 'calendar' | 'agent' | 'profile'
+type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'calendar' | 'agent' | 'profile'
 const TWO_WEEKS = 14 * 24 * 3_600_000
 type Toast = { text: string; undo?: BabyEvent[] }
 
@@ -71,6 +72,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [unit, setUnit] = useState<Unit>('oz')
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
+  const [tummyGoal, setTummyGoal] = useState(30)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
@@ -112,6 +114,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.listFeatures().then(setFeatureRows)
     void store.listActivityTypes().then(setActivityTypes)
+    void store.getSetting('tummyGoal').then((v) => {
+      const n = Number(v)
+      if (v && Number.isFinite(n) && n >= 0) setTummyGoal(n)
+    })
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
@@ -258,7 +264,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     await store.setFeature(id, enabled)
     setFeatureRows(await store.listFeatures())
     // Do not leave the user on a tab they just turned off.
-    if (!enabled && id === tab) setTab('today')
+    if (!enabled && (id === tab || (id === 'activities' && tab === 'activity'))) setTab('today')
   }
 
   /** Returns a message to show in the sheet when the save fails, otherwise closes it. */
@@ -378,6 +384,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
+  function changeTummyGoal(minutes: number) {
+    setTummyGoal(minutes)
+    void store.setSetting('tummyGoal', String(minutes))
+  }
+
   function openLog(t: LogTab) {
     setLogTab(t)
     setTab('log')
@@ -386,6 +397,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const pageName = {
     today: 'Today',
     timeline: 'Timeline',
+    activity: 'Activity',
     log: 'Log',
     analytics: 'Analytics',
     calendar: 'Calendar',
@@ -471,6 +483,18 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         {tab === 'timeline' && on('timeline') && (
           <Timeline events={events} now={now} unit={unit} baby={baby} activityTypes={activityTypes} on={on} onDelete={(list) => void remove(list)} onEdit={setEditing} />
         )}
+        {tab === 'activity' && on('activities') && (
+          <Activity
+            baby={baby}
+            events={events}
+            now={now}
+            types={activityTypes}
+            goalMin={tummyGoal}
+            onGoal={changeTummyGoal}
+            onLog={(draft) => void quickLog(draft)}
+            onEdit={setEditing}
+          />
+        )}
         {tab === 'analytics' && on('analytics') && (
           <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
         )}
@@ -519,6 +543,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           <button type="button" aria-current={tab === 'timeline'} onClick={() => setTab('timeline')}>
             <ListIcon />
             Timeline
+          </button>
+        )}
+        {on('activities') && (
+          <button type="button" aria-current={tab === 'activity'} onClick={() => setTab('activity')}>
+            <FaceIcon />
+            Activity
           </button>
         )}
         <button type="button" className="fab" aria-current={tab === 'log'} onClick={() => setTab('log')}>

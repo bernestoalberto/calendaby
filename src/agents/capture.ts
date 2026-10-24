@@ -89,8 +89,11 @@ function parseClause(clause: string, at: number): DraftEvent[] {
 // Ids match the seeded `activity_types` rows; a custom type added in the app is logged by tapping it.
 const ACTIVITY_WORDS: [string, RegExp][] = [
   ['tummy', /\btummy\b/],
+  ['crawl', /\b(crawl|crawled|crawling)\b/],
+  ['swim', /\b(swim|swam|swimming|pool)\b/],
+  ['walk', /\b(walked|walking|took steps)\b/],
   ['bath', /\b(bath|bathed|bathing)\b/],
-  ['outdoor', /\b(outside|outdoors?|stroller walk|walk|park)\b/],
+  ['outdoor', /\b(outside|outdoors?|walk|park)\b/],
   ['indoor', /\b(played|play time|playtime|playing)\b/],
 ]
 

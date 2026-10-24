@@ -1639,7 +1639,8 @@ main {
   bottom: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   align-items: end;
   max-width: 560px;
   margin: 0 auto;

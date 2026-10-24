@@ -37,7 +37,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -83,6 +83,10 @@ const MIGRATIONS: Record<number, string[]> = {
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
     ),
   ],
+  // Crawling, walking and swimming join the seed; installs already at v3 get them here, edits are kept.
+  4: DEFAULT_ACTIVITY_TYPES.map(
+    (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
+  ),
 }
 
 /** The localStorage key the first MVP used; its events move into SQLite on first open. */
