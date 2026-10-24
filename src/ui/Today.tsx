@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
 import { rangeText, tonightText, type Outlook } from '../domain/outlook'
+import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import type { HandoffBrief } from '../agents/handoff'
@@ -43,6 +44,7 @@ interface Props {
   day: DaySummary
   forecast?: NapForecast
   outlook: Outlook
+  checkup?: Checkup & { around: number }
   lastFeed?: BabyEvent
   lastDiaper?: BabyEvent
   lastMed?: BabyEvent
@@ -411,7 +413,8 @@ function ComingUp(p: Props) {
   const sec = useSection('advice')
   const items = p.outlook.items.slice(0, 3)
   const tonight = new Date(p.now).getHours() >= 16 ? p.outlook.tonight : undefined
-  if (items.length === 0 && !tonight) return null
+  const checkup = p.checkup
+  if (items.length === 0 && !tonight && !checkup) return null
   return (
     <section className="card insight" {...sec}>
       <div className="card-head">
@@ -430,6 +433,16 @@ function ComingUp(p: Props) {
             {open === item.id && <p>{item.advice}</p>}
           </button>
         ))}
+        {checkup && (
+          <button type="button" className="insight-row" aria-expanded={open === 'checkup'} onClick={() => setOpen(open === 'checkup' ? undefined : 'checkup')}>
+            <span className="card-head">
+              <b>Checkup: {checkup.label}</b>
+              <span className="range">{new Date(checkup.around).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+            </span>
+            <small className="muted">{checkup.vaccines.length > 0 ? `Vaccines: ${checkup.vaccines.join(', ')}` : 'Well-baby visit, no vaccines due'}</small>
+            {open === 'checkup' && <p>US schedule (2025 CDC/AAP). Book ahead and confirm the plan with your pediatrician.</p>}
+          </button>
+        )}
         {tonight && (
           <p className="tonight">
             <MoonIcon width={16} height={16} /> Tonight: {tonightText(tonight, clock)}

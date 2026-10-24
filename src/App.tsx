@@ -11,7 +11,8 @@ import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
 import { outlook } from './domain/outlook'
-import { ageInWeeks, normFor, type AgeNorm } from './domain/ageNorms'
+import { normFor, type AgeNorm } from './domain/ageNorms'
+import { nextCheckups, weeksOld } from './knowledge/index'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
 import { feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
@@ -150,7 +151,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
-  const weeks = birth ? ageInWeeks(birth, now) : undefined
+  const weeks = weeksOld(birth, now)
+  const checkup = weeks === undefined ? undefined : nextCheckups(weeks, 'us', 1)[0]
   const view = useMemo(() => outlook(events, normFor(ageNorms, weeks), weeks, now), [events, ageNorms, weeks, now])
   const agenda = useMemo(
     () => buildAgenda(appointments, calEvents, sleepForecast(events, now), feedForecast(events, now), now),
@@ -316,6 +318,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         mode: 'chat',
         prompt: q,
         now: isoWithOffset(new Date(nowMs())),
+        birth: birth || undefined,
         events: events.slice(-500),
       })
       const { added } = await logAll(res.drafts)
@@ -468,6 +471,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             day={day}
             forecast={forecast}
             outlook={view}
+            checkup={checkup && { ...checkup, around: new Date(`${birth}T00:00`).getTime() + checkup.at * 7 * 86_400_000 }}
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
             lastMed={lastOf('med')}
