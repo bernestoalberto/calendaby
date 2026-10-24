@@ -8,6 +8,7 @@ import { googleTools, type Google } from './google.js'
 import { dailyStats } from '../src/domain/analytics.js'
 import { DraftEventSchema, type DraftEvent } from '../src/domain/events.js'
 import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from '../src/domain/predictions.js'
+import { GUIDE_RULES, guide, screen, TOPIC_NAMES, weeksOld } from '../src/knowledge/index.js'
 
 export function apiKey(): string | undefined {
   return process.env.OPEN_ROUTER_API || process.env.OPENROUTER_API_KEY
@@ -50,9 +51,10 @@ const CHAT = (now: string, google = false) => `
 You help a parent, often a dad mid-shift, with questions, predictions, and advice about their baby. The current local time is ${now}.
 For questions about their baby's day, schedule, predictions, or advice, call getPredictions and listEvents first, and cite specific times, amounts, and patterns from their logs.
 Deduce patterns from the baby's own history (wake windows, nap lengths, feeding intervals, usual bottle volume or next nursing side, bedtime sweet-spot) and give brief, practical, supportive advice.
-Be brief and kind. Don't diagnose; for anything worrying, say what to watch for and suggest calling the pediatrician.
+For general baby-care questions (sleep, feeding, solids, diapers, development, checkups, warning signs), use pediatric_guide.
+Be brief and kind.
 If the parent tells you something that happened, log it with record_events.
-${google ? GOOGLE_HINT : ''}${SAFETY}`
+${google ? GOOGLE_HINT : ''}${GUIDE_RULES}${SAFETY}`
 
 // The model writes `at` as ISO 8601; the app stores epoch ms.
 const ModelEvents = z.array(z.looseObject({ at: z.string() }))
@@ -170,10 +172,25 @@ export async function runAgent(
     },
   })
 
+  const ageWeeks = weeksOld(req.birth, Date.parse(req.now))
+  const pediatricGuide = tool({
+    description:
+      'Vetted pediatric guidance (CDC, NIH, WHO, MedlinePlus) for one topic, filtered to the baby age. ' +
+      'Returns facts with numbered citations, the sources, and a note when there is no vetted guidance.',
+    inputSchema: z.object({ topic: z.enum(TOPIC_NAMES) }),
+    execute: async ({ topic }) => guide(topic, ageWeeks),
+  })
+  const flagged = req.mode === 'chat' ? screen(req.prompt, ageWeeks) : { flags: [], dosing: false }
+  const alerts = [
+    ...flagged.flags.map((f) => `Possible red flag, lead with this advice: ${f.say}`),
+    ...(flagged.dosing ? ['The parent asked about medicine doses. Do not give a dose; call pediatric_guide with topic medicine.'] : []),
+  ].join('\n')
+  const age = ageWeeks === undefined ? 'The baby age is unknown; ask for it if the answer depends on age.' : `The baby is ${ageWeeks} weeks old.`
+
   const result = await generateText({
     model,
     reasoning: 'low',
-    system: req.mode === 'chat' ? CHAT(req.now, google !== undefined) : CAPTURE(req.now),
+    system: req.mode === 'chat' ? `${CHAT(req.now, google !== undefined)}\n${age}\n${alerts}` : CAPTURE(req.now),
     prompt: req.prompt,
     tools:
       req.mode === 'chat'
@@ -181,6 +198,7 @@ export async function runAgent(
             getPredictions,
             listEvents,
             record_events: recordEvents,
+            pediatric_guide: pediatricGuide,
             ...(google ? googleTools(google, db, session.now.getTime()) : {}),
           }
         : { record_events: recordEvents, ask_parent: askParent },
