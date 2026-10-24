@@ -15,11 +15,12 @@
 
 main {
   padding: 8px 20px 24px;
+  zoom: var(--zoom, 1);
 }
 
 .stack {
   display: grid;
-  gap: 16px;
+  gap: var(--gap, 16px);
 }
 
 .muted {
@@ -83,7 +84,7 @@ main {
   min-height: 44px;
   padding: 4px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   line-height: 1.2;
 }
@@ -105,7 +106,7 @@ main {
   width: 44px;
   height: 44px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: transparent;
   color: var(--text-2);
 }
@@ -120,7 +121,7 @@ main {
   width: 36px;
   height: 36px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: linear-gradient(135deg, var(--primary-2), var(--sage-2));
   color: #fff;
   font-weight: 700;
@@ -132,7 +133,7 @@ main {
   background: var(--surface);
   border-radius: var(--r-card);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: var(--pad, 16px);
 }
 
 .card-head {
@@ -178,7 +179,7 @@ main {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -202,7 +203,7 @@ main {
   flex: none;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
 }
 
 .round-icon svg {
@@ -279,7 +280,7 @@ main {
   min-height: 48px;
   padding: 10px 20px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-weight: 600;
   font-size: 15px;
   transition: transform 0.12s;
@@ -332,7 +333,7 @@ main {
 .chip {
   padding: 8px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   color: var(--text);
   font-size: 14px;
@@ -351,7 +352,7 @@ main {
   gap: 6px;
   padding: 6px 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   color: var(--primary);
   font-weight: 600;
@@ -424,14 +425,14 @@ main {
 
 .segmented.track {
   padding: 4px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-mid);
 }
 
 .segmented.track button {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: none;
   color: var(--text-2);
   font-size: 14px;
@@ -450,7 +451,7 @@ main {
 
 .segmented.pills button {
   padding: 10px 16px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   color: var(--text-2);
   font-size: 15px;
@@ -465,13 +466,13 @@ main {
 .segmented.mini {
   padding: 2px;
   gap: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
 }
 
 .segmented.mini button {
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: none;
   color: var(--text-2);
   font-size: 12px;
@@ -501,7 +502,7 @@ main {
   gap: 8px;
   margin: 0 auto;
   padding: 10px 18px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   font-size: 14px;
   font-weight: 500;
@@ -519,7 +520,7 @@ main {
 .status-pill .dot {
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--sage-text);
 }
 
@@ -657,7 +658,7 @@ main {
   place-items: center;
   width: 58px;
   height: 58px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   transition: transform 0.12s;
 }
 
@@ -696,7 +697,7 @@ main {
   align-items: center;
   gap: 4px;
   padding: 4px 4px 4px 14px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -784,7 +785,7 @@ main {
   height: 18px;
   border: 3px solid var(--primary-2);
   border-right-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--r-round);
 }
 
 .goal-row {
@@ -807,7 +808,7 @@ main {
 .progress {
   height: 10px;
   margin: 8px 0 16px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-high);
   overflow: hidden;
 }
@@ -815,7 +816,7 @@ main {
 .progress span {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--primary-2);
 }
 
@@ -877,7 +878,7 @@ main {
   flex: none;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--lilac);
   color: var(--primary);
 }
@@ -994,7 +995,7 @@ main {
   width: 52px;
   height: 52px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -1038,7 +1039,7 @@ main {
 .presets button {
   padding: 10px 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   font-weight: 600;
   font-size: 15px;
@@ -1127,7 +1128,7 @@ main {
 
 .date-pill {
   padding: 8px 20px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-mid);
   font-size: 18px;
   font-weight: 600;
@@ -1177,7 +1178,7 @@ main {
 .day-map {
   position: relative;
   height: 36px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-high);
   overflow: hidden;
 }
@@ -1230,7 +1231,7 @@ main {
   width: 9px;
   height: 9px;
   margin-right: 6px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
 }
 
 .key.sleep::before {
@@ -1286,7 +1287,7 @@ main {
   width: 36px;
   height: 36px;
   margin-top: 12px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--lilac);
   color: var(--primary);
 }
@@ -1313,7 +1314,7 @@ main {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--sage-soft);
   color: var(--sage-text);
   font-size: 12px;
@@ -1392,7 +1393,7 @@ main {
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--surface);
   font-size: 11px;
 }
@@ -1564,7 +1565,7 @@ main {
   display: flex;
   height: 12px;
   margin-top: 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   overflow: hidden;
 }
 
@@ -1624,7 +1625,7 @@ main {
 .cheer {
   margin: 0;
   padding: 12px 16px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-low);
   text-align: center;
   font-size: 13px;
@@ -1672,7 +1673,7 @@ main {
   width: 64px;
   height: 64px;
   margin-top: -28px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--primary-2);
   color: #fff;
   box-shadow: var(--shadow-up);
@@ -1845,4 +1846,121 @@ main {
   justify-items: center;
   gap: 12px;
   text-align: center;
+}
+
+/* Appearance: per-section fills. [data-sec] marks a restylable section; colour and corners come from the variables it sets. */
+[data-sec][data-look='tint'] {
+  background: var(--lilac);
+  color: var(--on-lilac);
+  box-shadow: none;
+}
+
+[data-sec][data-look='solid'] {
+  --text: #fff;
+  --text-2: rgb(255 255 255 / 0.88);
+  --muted: rgb(255 255 255 / 0.72);
+  --primary: #fff;
+  --primary-2: #fff;
+  --lilac: rgb(255 255 255 / 0.22);
+  --on-lilac: #fff;
+  --surface: rgb(255 255 255 / 0.18);
+  --surface-low: rgb(255 255 255 / 0.16);
+  --surface-mid: rgb(255 255 255 / 0.16);
+  --surface-high: rgb(255 255 255 / 0.22);
+  --oat: rgb(255 255 255 / 0.2);
+  --sage-text: #fff;
+  background: var(--fill);
+  color: #fff;
+}
+
+[data-sec][data-look='outline'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--fill);
+}
+
+/* Sections that are not boxes by default need a frame before a fill can show. */
+[data-sec='quick'][data-look],
+[data-sec='topbar'][data-look],
+[data-sec='nav'][data-look] {
+  padding-inline: 12px;
+}
+
+[data-sec='quick'][data-look] {
+  padding-block: 12px;
+  border-radius: var(--r-card);
+}
+
+.nav[data-look] {
+  backdrop-filter: none;
+}
+
+.nav[data-look='solid'] .fab {
+  background: #fff;
+  color: var(--fill);
+}
+
+.nav[data-look='solid'] button[aria-current='true'] {
+  color: #fff;
+}
+
+/* Profile > Look & feel */
+.appearance-row {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface) inset;
+}
+
+.swatch.picker {
+  appearance: none;
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  overflow: hidden;
+}
+
+.swatch.picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+  opacity: 0;
+}
+
+.swatch.dot {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+}
+
+.section-style {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.section-style > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.section-style > summary span:first-child {
+  display: grid;
 }

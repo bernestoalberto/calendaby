@@ -25,6 +25,7 @@ import {
 } from './icons'
 import { clock, eventDetail } from './kinds'
 import { ago, duration, formatAmount, type Unit } from './time'
+import { useSection } from './themeContext'
 
 export type QuickKind = 'feed' | 'diaper' | 'med' | 'note'
 
@@ -59,10 +60,15 @@ interface Props {
 
 export function Today(p: Props) {
   const awakeFor = p.lastDone?.end !== undefined ? p.now - p.lastDone.end : undefined
+  const status = useSection('status')
+  const quick = useSection('quick')
+  const composer = useSection('composer')
+  const totals = useSection('totals')
+  const handoff = useSection('handoff')
 
   return (
     <div className="stack">
-      <div className={p.asleep ? 'status-pill asleep' : 'status-pill'}>
+      <div className={p.asleep ? 'status-pill asleep' : 'status-pill'} {...status}>
         <span className="dot" />
         <span>
           {p.baby} is currently <b>{p.asleep ? 'Asleep' : 'Awake'}</b>
@@ -73,7 +79,7 @@ export function Today(p: Props) {
 
       {p.on('napForecast') && <NapCard {...p} />}
 
-      <section>
+      <section {...quick}>
         <div className="quick-row">
           <button type="button" className={p.asleep ? 'quick sleep on' : 'quick sleep'} onClick={p.onToggleSleep}>
             <span>{p.asleep ? <SunIcon /> : <MoonIcon />}</span>
@@ -109,6 +115,7 @@ export function Today(p: Props) {
       {p.on('freeText') && (
       <form
         className="composer"
+        {...composer}
         onSubmit={(e: FormEvent) => {
           e.preventDefault()
           p.onSubmitText()
@@ -194,7 +201,7 @@ export function Today(p: Props) {
       )}
 
       {p.on('totals') && (
-      <section className="card totals">
+      <section className="card totals" {...totals}>
         <div className="card-head">
           <h3>
             <span className="ring-glyph" aria-hidden="true" />
@@ -266,7 +273,7 @@ export function Today(p: Props) {
       {p.on('insights') && p.insights.length > 0 && <Insights {...p} />}
 
       {p.on('handoff') && (
-      <section className="card tip">
+      <section className="card tip" {...handoff}>
         <span className="tip-icon">
           <BulbIcon />
         </span>
@@ -298,8 +305,9 @@ function LastCard(props: {
   value: string
   detail: string
 }) {
+  const sec = useSection('last')
   return (
-    <div className="card last">
+    <div className="card last" {...sec}>
       <div className="last-top">
         <span className={`round-icon ${props.tone}`}>{props.icon}</span>
         {props.badge}
@@ -312,10 +320,11 @@ function LastCard(props: {
 }
 
 function NapCard(p: Props) {
+  const sec = useSection('nap')
   const f = p.forecast
   if (p.asleep && p.current) {
     return (
-      <section className="card nap">
+      <section className="card nap" {...sec}>
         <div className="nap-head">
           <h3>
             <MoonIcon width={20} height={20} /> Sleeping
@@ -330,7 +339,7 @@ function NapCard(p: Props) {
   }
   if (!f || f.nextNapAt === undefined || f.awakeSince === undefined) {
     return (
-      <section className="card nap">
+      <section className="card nap" {...sec}>
         <div className="nap-head">
           <h3>
             <SparkIcon width={20} height={20} /> Next Nap
@@ -347,7 +356,7 @@ function NapCard(p: Props) {
   if (left < -60) {
     // Long past the estimate usually means a sleep was not logged, not a baby awake for hours.
     return (
-      <section className="card nap">
+      <section className="card nap" {...sec}>
         <div className="nap-head">
           <h3>
             <SparkIcon width={20} height={20} /> Next Nap
@@ -367,7 +376,7 @@ function NapCard(p: Props) {
   const r = 44
   const c = 2 * Math.PI * r
   return (
-    <section className="card nap">
+    <section className="card nap" {...sec}>
       <div className="nap-head">
         <h3>
           <SparkIcon width={20} height={20} /> Next Nap
@@ -399,10 +408,11 @@ function NapCard(p: Props) {
 // Only the top insight shows; the rest wait behind a tap so the screen stays calm.
 function Insights(p: Props) {
   const [open, setOpen] = useState(false)
+  const sec = useSection('advice')
   const shown = open ? p.insights : p.insights.slice(0, 1)
   const hidden = p.insights.length - shown.length
   return (
-    <section className="card insight">
+    <section className="card insight" {...sec}>
       <div className="card-head">
         <h3>
           <SparkIcon width={20} height={20} /> Advice

@@ -14,6 +14,7 @@ import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
 import { deduceInsights, feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
+import { DEFAULT_THEME, parseTheme, type Theme } from './domain/theme'
 import {
   notificationAccess,
   requestNotificationAccess,
@@ -32,6 +33,7 @@ import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon
 import { eventTitle } from './ui/kinds'
 import { Logger, type LogTab } from './ui/Logger'
 import { Profile } from './ui/Profile'
+import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
 import { Timeline } from './ui/Timeline'
 import { Today } from './ui/Today'
@@ -73,6 +75,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
   const [tummyGoal, setTummyGoal] = useState(30)
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
@@ -113,6 +116,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('birth').then((v) => v && setBirth(v))
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.listFeatures().then(setFeatureRows)
+    void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
     void store.getSetting('tummyGoal').then((v) => {
       const n = Number(v)
@@ -126,6 +130,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
     void notificationAccess().then(setNotifAccess)
   }, [store, account.name])
+
+  useEffect(() => applyTheme(document.documentElement, theme), [theme])
 
   useEffect(() => {
     if (!toast) return
@@ -339,6 +345,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.setSetting(key, value)
   }
 
+  function changeTheme(next: Theme) {
+    setTheme(next)
+    void store.setSetting('theme', JSON.stringify(next))
+  }
+
   function changeUnit(u: Unit) {
     setUnit(u)
     void store.setSetting('unit', u)
@@ -406,8 +417,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   }[tab]
 
   return (
+    <ThemeContext.Provider value={theme}>
     <div className="app">
-      <header className="topbar">
+      <header className="topbar" {...sectionProps(theme, 'topbar')}>
         <div className="topbar-left">
           <span className="logo" aria-hidden="true">
             <LogoIcon />
@@ -522,6 +534,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             birth={birth}
             caregiver={caregiver}
             unit={unit}
+            theme={theme}
+            onTheme={changeTheme}
             persistent={store.persistent}
             reminders={reminders}
             notifAccess={notifAccess}
@@ -534,7 +548,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         )}
       </main>
 
-      <nav className="nav" aria-label="Main">
+      <nav className="nav" aria-label="Main" {...sectionProps(theme, 'nav')}>
         <button type="button" aria-current={tab === 'today'} onClick={() => setTab('today')}>
           <ClockIcon />
           Today
@@ -604,5 +618,6 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         </Sheet>
       )}
     </div>
+    </ThemeContext.Provider>
   )
 }

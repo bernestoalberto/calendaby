@@ -28,7 +28,17 @@
   --nap-gradient: linear-gradient(135deg, #f3e5f5 0%, #f6f0fb 50%, #e8f5e9 100%);
   --r-card: 24px;
   --r-tile: 20px;
-  font: 16px/1.5 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  --r-pill: 999px;
+  --r-round: 50%;
+  /* Used by the solid look and by accent-derived colours; the dark palette flips them. */
+  --fill: #673ab7;
+  --tone: black;
+  --p-mix: 60%;
+  --lift: 0%;
+  --tint-mix: 14%;
+  --tint2-mix: 36%;
+  font: 16px/1.5 var(--font);
   color: var(--text);
   background: var(--bg);
   color-scheme: light;
@@ -36,9 +46,10 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Night feeds: same hierarchy, dimmed, no pure white. */
+/* Night feeds: same hierarchy, dimmed, no pure white. The palette is written twice because a media query
+   cannot be combined with the Mode switch (data-theme) in one selector. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #16131a;
     --surface: #211d26;
     --surface-low: #1c1820;
@@ -66,7 +77,62 @@
     --shadow-up: 0 12px 32px -4px rgb(0 0 0 / 0.5);
     --nap-gradient: linear-gradient(135deg, #2b2238 0%, #241f2b 50%, #1f2b22 100%);
     color-scheme: dark;
+    --fill: #5b3a9a;
+    --tone: white;
+    --p-mix: 55%;
+    --lift: 22%;
+    --tint-mix: 28%;
+    --tint2-mix: 48%;
   }
+}
+
+:root[data-theme='dark'] {
+  --bg: #16131a;
+  --surface: #211d26;
+  --surface-low: #1c1820;
+  --surface-mid: #2a2530;
+  --surface-high: #332d3a;
+  --oat: #2a2530;
+  --text: #efe7f2;
+  --text-2: #cbc0d6;
+  --muted: #9a90a6;
+  --line: rgb(255 255 255 / 0.07);
+  --primary: #d3bbff;
+  --primary-2: #b997ff;
+  --on-primary: #250059;
+  --lilac: #3a2d55;
+  --lilac-2: #57449a;
+  --lilac-thread: #3d3450;
+  --on-lilac: #ebddff;
+  --sage: #78dc77;
+  --sage-soft: #1d3320;
+  --sage-2: #4f9a52;
+  --sage-text: #94f990;
+  --on-sage: #002204;
+  --danger: #ffb4ab;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-up: 0 12px 32px -4px rgb(0 0 0 / 0.5);
+  --nap-gradient: linear-gradient(135deg, #2b2238 0%, #241f2b 50%, #1f2b22 100%);
+  color-scheme: dark;
+  --fill: #5b3a9a;
+  --tone: white;
+  --p-mix: 55%;
+  --lift: 22%;
+  --tint-mix: 28%;
+  --tint2-mix: 48%;
+}
+
+/* A picked colour (page-wide on <html>, or per section) drives every purple surface from one --accent.
+   :is() keeps this above the palette blocks in specificity. */
+:is(:root, [data-sec])[data-accent] {
+  --primary: color-mix(in oklab, var(--accent) var(--p-mix), var(--tone));
+  --primary-2: color-mix(in oklab, white var(--lift), var(--accent));
+  --fill: var(--accent);
+  --lilac: color-mix(in oklab, var(--accent) var(--tint-mix), var(--surface));
+  --lilac-2: color-mix(in oklab, var(--accent) var(--tint2-mix), var(--surface));
+  --lilac-thread: var(--lilac-2);
+  --on-lilac: color-mix(in oklab, var(--accent) 30%, var(--tone));
+  --nap-gradient: linear-gradient(135deg, var(--lilac) 0%, var(--surface) 55%, var(--sage-soft) 100%);
 }
 
 * {

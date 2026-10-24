@@ -1,6 +1,8 @@
 import type { FeatureRow } from '../domain/features'
+import type { Theme } from '../domain/theme'
 import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
+import { Appearance } from './Appearance'
 import { Badge, Segmented } from './controls'
 import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { babyAge, type Unit } from './time'
@@ -14,6 +16,8 @@ interface Props {
   birth: string
   caregiver: string
   unit: Unit
+  theme: Theme
+  onTheme: (t: Theme) => void
   persistent: boolean
   reminders: boolean
   notifAccess: NotificationAccess
@@ -127,6 +131,8 @@ export function Profile(p: Readonly<Props>) {
           </fieldset>
         ))}
       </section>
+
+      <Appearance theme={p.theme} onTheme={p.onTheme} />
 
       <section className="card">
         <div className="card-head">
