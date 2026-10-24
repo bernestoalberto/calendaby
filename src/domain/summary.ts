@@ -8,10 +8,16 @@ export interface DaySummary {
   wet: number
   dirty: number
   changes: number
+  tummyMinutes: number
+  pumpMl: number
 }
 
 function addWakeEvent(s: DaySummary, e: BabyEvent): void {
-  if (e.kind === 'feed') {
+  if (e.kind === 'activity') {
+    if (e.type === 'tummy') s.tummyMinutes += e.durationMin ?? 0
+  } else if (e.kind === 'pump') {
+    s.pumpMl += e.amountMl ?? 0
+  } else if (e.kind === 'feed') {
     s.feeds++
     s.feedMl += e.amountMl ?? 0
   } else if (e.kind === 'diaper') {
@@ -27,7 +33,7 @@ export function summarizeDay(events: BabyEvent[], now: Date): DaySummary {
   start.setHours(0, 0, 0, 0)
   const from = start.getTime()
   const to = now.getTime()
-  const s: DaySummary = { feeds: 0, feedMl: 0, sleepMinutes: 0, naps: 0, wet: 0, dirty: 0, changes: 0 }
+  const s: DaySummary = { feeds: 0, feedMl: 0, sleepMinutes: 0, naps: 0, wet: 0, dirty: 0, changes: 0, tummyMinutes: 0, pumpMl: 0 }
 
   let asleepSince: number | undefined
   const sorted = [...events].filter((e) => e.at <= to).sort((a, b) => a.at - b.at)

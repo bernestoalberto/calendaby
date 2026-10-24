@@ -42,6 +42,27 @@ describe('parseLog', () => {
     expect(parseLog('gave tylenol 2.5 ml', now).drafts[0]).toMatchObject({ kind: 'med', name: 'tylenol', doseMl: 2.5 })
   })
 
+  it('logs tummy time and other activities with a duration', () => {
+    expect(parseLog('tummy time 5 min', now).drafts).toEqual([
+      { kind: 'activity', at: now.getTime(), type: 'tummy', durationMin: 5 },
+    ])
+    expect(parseLog('bath at 3', now).drafts).toEqual([{ kind: 'activity', at: at(15), type: 'bath', durationMin: undefined }])
+    expect(parseLog('played outside for 1 hour', now).drafts[0]).toMatchObject({ type: 'outdoor', durationMin: 60 })
+  })
+
+  it('does not read "5 min ago" as a duration', () => {
+    expect(parseLog('tummy time 5 min ago', now).drafts).toEqual([
+      { kind: 'activity', at: now.getTime() - 5 * 60_000, type: 'tummy', durationMin: undefined },
+    ])
+  })
+
+  it('logs pumping and does not count it as a feed', () => {
+    expect(parseLog('pumped 4 oz left', now).drafts).toEqual([
+      { kind: 'pump', at: now.getTime(), amountMl: 118, side: 'left', durationMin: undefined },
+    ])
+    expect(parseLog('breast pump 20 min', now).drafts.map((d) => d.kind)).toEqual(['pump'])
+  })
+
   it('returns what it could not understand instead of guessing', () => {
     expect(parseLog('grandma visited', now)).toEqual({ drafts: [], unsure: ['grandma visited'] })
   })

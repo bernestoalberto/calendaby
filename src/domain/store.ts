@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { SqlDriver } from '../db/driver'
 import { BabyEvent, type DraftEvent } from './events'
+import { activityId, DEFAULT_ACTIVITY_TYPES, type ActivityType } from './activities'
 import { DEFAULT_FEATURES, type FeatureRow } from './features'
 
 export interface EventStore {
@@ -26,7 +27,8 @@ export function findDuplicate(events: BabyEvent[], draft: DraftEvent): BabyEvent
     (e) =>
       e.kind === draft.kind &&
       Math.abs(e.at - draft.at) < DUPLICATE_WINDOW_MS &&
-      (e.kind !== 'sleep' || draft.kind !== 'sleep' || e.phase === draft.phase),
+      (e.kind !== 'sleep' || draft.kind !== 'sleep' || e.phase === draft.phase) &&
+      (e.kind !== 'activity' || draft.kind !== 'activity' || e.type === draft.type),
   )
 }
 
@@ -35,7 +37,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -61,6 +63,21 @@ const MIGRATIONS: Record<number, string[]> = {
       sort INTEGER NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1
     )`,
+    ...DEFAULT_FEATURES.map(
+      (f, i) =>
+        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
+    ),
+  ],
+  3: [
+    `CREATE TABLE IF NOT EXISTS activity_types (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      sort INTEGER NOT NULL
+    )`,
+    ...DEFAULT_ACTIVITY_TYPES.map(
+      (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
+    ),
+    // Installs from before v3 get the activity and pumping switches (on); rows they already have are left alone.
     ...DEFAULT_FEATURES.map(
       (f, i) =>
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
@@ -173,6 +190,22 @@ export class SqliteEventStore implements EventStore {
 
   async setFeature(id: string, enabled: boolean): Promise<void> {
     await this.db.exec('UPDATE features SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, id])
+  }
+
+  async listActivityTypes(): Promise<ActivityType[]> {
+    return this.db.query<ActivityType>('SELECT id, label FROM activity_types ORDER BY sort, label')
+  }
+
+  /** Adds a custom activity ("Music time"); returns the existing one when the id is taken. */
+  async addActivityType(label: string): Promise<ActivityType> {
+    const id = activityId(label)
+    if (!id) throw new Error('Give the activity a name')
+    await this.db.exec(
+      'INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM activity_types))',
+      [id, label.trim()],
+    )
+    const [row] = await this.db.query<ActivityType>('SELECT id, label FROM activity_types WHERE id = ?', [id])
+    return row
   }
 
   async getSetting(key: string): Promise<string | undefined> {

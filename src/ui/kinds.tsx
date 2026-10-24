@@ -1,5 +1,6 @@
+import { activityLabel, DEFAULT_ACTIVITY_TYPES, type ActivityType } from '../domain/activities'
 import type { BabyEvent } from '../domain/events'
-import { BottleIcon, BreastIcon, DiaperIcon, MoonIcon, NoteIcon, PillIcon, SunIcon } from './icons'
+import { BottleIcon, BreastIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PillIcon, PumpIcon, SunIcon } from './icons'
 import { formatAmount, type Unit } from './time'
 
 export function eventIcon(e: BabyEvent) {
@@ -14,12 +15,16 @@ export function eventIcon(e: BabyEvent) {
       return <PillIcon />
     case 'note':
       return <NoteIcon />
+    case 'activity':
+      return <FaceIcon />
+    case 'pump':
+      return <PumpIcon />
   }
 }
 
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 
-export function eventTitle(e: BabyEvent, unit: Unit = 'ml'): string {
+export function eventTitle(e: BabyEvent, unit: Unit = 'ml', types: ActivityType[] = DEFAULT_ACTIVITY_TYPES): string {
   switch (e.kind) {
     case 'feed':
       if (e.method === 'breast') return `Nursing${e.durationMin ? ` · ${e.durationMin}m` : e.side ? `, ${e.side}` : ''}`
@@ -33,10 +38,14 @@ export function eventTitle(e: BabyEvent, unit: Unit = 'ml'): string {
       return `${titleCase(e.name)}${e.doseMl ? ` · ${e.doseMl} ml` : ''}`
     case 'note':
       return e.note
+    case 'activity':
+      return `${activityLabel(types, e.type)}${e.durationMin ? ` · ${e.durationMin}m` : ''}`
+    case 'pump':
+      return `Pumped${e.amountMl ? ` · ${formatAmount(e.amountMl, unit)}` : ''}`
   }
 }
 
-export function eventHeading(e: BabyEvent): string {
+export function eventHeading(e: BabyEvent, types: ActivityType[] = DEFAULT_ACTIVITY_TYPES): string {
   switch (e.kind) {
     case 'feed':
       return e.method === 'breast' ? 'Nursing Feed' : e.method === 'solids' ? 'Solids' : 'Bottle Feed'
@@ -48,6 +57,10 @@ export function eventHeading(e: BabyEvent): string {
       return titleCase(e.name)
     case 'note':
       return 'Note'
+    case 'activity':
+      return activityLabel(types, e.type)
+    case 'pump':
+      return 'Pumping'
   }
 }
 
@@ -63,6 +76,12 @@ export function eventDetail(e: BabyEvent, unit: Unit): string {
       return e.contents === 'both' ? 'Wet & Dirty' : titleCase(e.contents)
     case 'med':
       return e.doseMl ? `${e.doseMl} ml` : 'Given'
+    case 'activity':
+      return e.durationMin ? `${e.durationMin} mins` : 'Logged'
+    case 'pump': {
+      const parts = [e.amountMl ? formatAmount(e.amountMl, unit) : '', e.side ? `${titleCase(e.side)} side` : '', e.durationMin ? `${e.durationMin} mins` : '']
+      return parts.filter(Boolean).join(' · ') || 'Logged'
+    }
     default:
       return ''
   }

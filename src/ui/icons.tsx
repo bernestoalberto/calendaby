@@ -55,6 +55,11 @@ export const PillIcon = (p: IconProps) => (
     <path d="M9.5 9.5l5 5" />
   </Base>
 )
+export const PumpIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 3s6 6.2 6 10.5a6 6 0 0 1-12 0C6 9.2 12 3 12 3z" />
+  </Base>
+)
 export const NoteIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M5 3h10l4 4v14H5z" />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ActivityType } from '../domain/activities'
 import type { DraftEvent } from '../domain/events'
 import { elapsed, lastSide, nursingDraft, switchSide, toggle, EMPTY_TIMER, type NursingTimer, type Side } from '../domain/nursing'
 import type { SleepSession } from '../domain/summary'
@@ -9,6 +10,7 @@ import {
   CheckIcon,
   ClockIcon,
   DiaperIcon,
+  FaceIcon,
   MinusIcon,
   MoonIcon,
   NoteIcon,
@@ -16,6 +18,7 @@ import {
   PillIcon,
   PlayIcon,
   PlusIcon,
+  PumpIcon,
   StopIcon,
   SwapIcon,
 } from './icons'
@@ -25,12 +28,13 @@ import { duration, fromLocalInput, OZ, stopwatch, toLocalInput, type Unit } from
 // Kept out of render so the component stays pure.
 const nowMs = () => Date.now()
 
-export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note'
+export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump'
 
 const FEED_TAGS = ['Fussy', 'Spit-up', 'Gassy', 'Burped', 'Hiccups']
 const DIAPER_TAGS = ['Normal', 'Rash', 'Barrier cream', 'Blowout']
 const MEDS = ['Vitamin D', 'Tylenol', 'Ibuprofen', 'Gripe water', 'Gas drops']
 const PRESETS = { oz: [2, 4, 5, 6, 8], ml: [60, 90, 120, 150, 180] }
+const DURATIONS = [3, 5, 10, 15, 30]
 const STEP = { oz: 0.5, ml: 10 }
 const MAX = { oz: 12, ml: 360 }
 
@@ -38,6 +42,9 @@ interface Props {
   baby: string
   now: number
   unit: Unit
+  activityTypes: ActivityType[]
+  on: (feature: string) => boolean
+  onAddActivityType: (label: string) => Promise<ActivityType | undefined>
   tab: LogTab
   onTab: (t: LogTab) => void
   onUnit: (u: Unit) => void
@@ -48,6 +55,12 @@ interface Props {
   onTimer: (t: NursingTimer) => void
   onSave: (drafts: DraftEvent[]) => void
   onToggleSleep: () => void
+}
+
+/** A whole number of minutes, or undefined when the box is empty or not a positive number. */
+function toMinutes(value: string): number | undefined {
+  const n = Math.round(Number(value))
+  return value.trim() !== '' && n > 0 ? n : undefined
 }
 
 function withNote(tags: string[], note: string): { note?: string } {
@@ -67,6 +80,11 @@ export function Logger(p: Props) {
   const [contents, setContents] = useState<'wet' | 'dirty' | 'both' | null>(null)
   const [med, setMed] = useState(MEDS[0])
   const [dose, setDose] = useState('')
+  const [activity, setActivity] = useState(p.activityTypes[0]?.id ?? '')
+  const [minutes, setMinutes] = useState('')
+  const [newActivity, setNewActivity] = useState('')
+  const [pumpAmount, setPumpAmount] = useState('')
+  const [pumpSide, setPumpSide] = useState<'left' | 'right' | 'both' | null>(null)
 
   const nursing = nursingDraft(p.timer, p.now)
   const startMs = fromLocalInput(start)
@@ -79,6 +97,9 @@ export function Logger(p: Props) {
     setAmount(null)
     setContents(null)
     setDose('')
+    setMinutes('')
+    setPumpAmount('')
+    setPumpSide(null)
     setStart('')
     setEnd('')
     setAdjust(false)
@@ -110,6 +131,14 @@ export function Logger(p: Props) {
       drafts.push({ kind: 'med', at, name: med.toLowerCase(), doseMl: d > 0 && d <= 50 ? d : undefined, ...withNote([], note) })
     }
     if (p.tab === 'note' && note.trim()) drafts.push({ kind: 'note', at, note: note.trim() })
+    if (p.tab === 'activity' && activity) {
+      drafts.push({ kind: 'activity', at, type: activity, durationMin: toMinutes(minutes), ...withNote([], note) })
+    }
+    if (p.tab === 'pump') {
+      const value = Number(pumpAmount)
+      const amountMl = value > 0 ? Math.round(p.unit === 'oz' ? value * OZ : value) : undefined
+      drafts.push({ kind: 'pump', at, amountMl, side: pumpSide ?? undefined, durationMin: toMinutes(minutes), ...withNote([], note) })
+    }
     if (drafts.length) p.onSave(drafts)
     reset()
   }
@@ -119,9 +148,11 @@ export function Logger(p: Props) {
     (p.tab === 'sleep' && rangeOk) ||
     (p.tab === 'diaper' && contents !== null) ||
     (p.tab === 'med' && med.trim() !== '') ||
-    (p.tab === 'note' && note.trim() !== '')
+    (p.tab === 'note' && note.trim() !== '') ||
+    (p.tab === 'activity' && activity !== '') ||
+    (p.tab === 'pump' && (Number(pumpAmount) > 0 || toMinutes(minutes) !== undefined))
 
-  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note' }[p.tab]
+  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note', activity: 'Save Activity', pump: 'Save Pump' }[p.tab]
   const awake = p.awakeSince !== undefined ? `Awake ${duration(p.now - p.awakeSince)}` : undefined
 
   return (
@@ -154,6 +185,8 @@ export function Logger(p: Props) {
             { value: 'sleep', label: <><MoonIcon width={18} height={18} /> Sleep</> },
             { value: 'diaper', label: <><DiaperIcon width={18} height={18} /> Diaper</> },
             { value: 'med', label: <><PillIcon width={18} height={18} /> Meds &amp; Health</> },
+            ...(p.on('activities') ? [{ value: 'activity' as const, label: <><FaceIcon width={18} height={18} /> Tummy &amp; Play</> }] : []),
+            ...(p.on('pumping') ? [{ value: 'pump' as const, label: <><PumpIcon width={18} height={18} /> Pump</> }] : []),
             { value: 'note', label: <><NoteIcon width={18} height={18} /> Note</> },
           ]}
         />
@@ -344,6 +377,88 @@ export function Logger(p: Props) {
           <label className="field">
             <span className="field-label">Optional note</span>
             <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Temp 100.2°F before dose" />
+          </label>
+        </section>
+      )}
+
+      {p.tab === 'activity' && (
+        <section className="card">
+          <div className="card-head">
+            <h3>
+              <span className="round-icon sage small">
+                <FaceIcon />
+              </span>
+              Activity
+            </h3>
+          </div>
+          <div className="chips">
+            {p.activityTypes.map((t) => (
+              <button key={t.id} type="button" aria-pressed={activity === t.id} className={activity === t.id ? 'chip on' : 'chip'} onClick={() => setActivity(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="presets">
+            {DURATIONS.map((m) => (
+              <button key={m} type="button" aria-pressed={minutes === String(m)} onClick={() => setMinutes(String(m))}>
+                {m}m
+              </button>
+            ))}
+          </div>
+          <label className="field">
+            <span className="field-label">Minutes (optional)</span>
+            <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="5" />
+          </label>
+          <label className="field">
+            <span className="field-label">Optional note</span>
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Lifted her head the whole time" />
+          </label>
+          <form
+            className="row-field"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void p.onAddActivityType(newActivity).then((added) => {
+                if (added) setActivity(added.id)
+                setNewActivity('')
+              })
+            }}
+          >
+            <input value={newActivity} onChange={(e) => setNewActivity(e.target.value)} placeholder="Add your own, e.g. Music time" aria-label="New activity" />
+            <button type="submit" className="chip-button" disabled={!newActivity.trim()}>
+              Add
+            </button>
+          </form>
+        </section>
+      )}
+
+      {p.tab === 'pump' && (
+        <section className="card">
+          <div className="card-head">
+            <h3>
+              <span className="round-icon lilac small">
+                <PumpIcon />
+              </span>
+              Pumping
+            </h3>
+          </div>
+          <label className="field">
+            <span className="field-label">Amount ({p.unit})</span>
+            <input inputMode="decimal" value={pumpAmount} onChange={(e) => setPumpAmount(e.target.value)} placeholder={p.unit === 'oz' ? '4' : '120'} />
+          </label>
+          <div className="chips">
+            {(['left', 'right', 'both'] as const).map((s) => (
+              <button key={s} type="button" aria-pressed={pumpSide === s} className={pumpSide === s ? 'chip on' : 'chip'} onClick={() => setPumpSide(pumpSide === s ? null : s)}>
+                {s === 'both' ? 'Both' : s === 'left' ? 'Left' : 'Right'}
+              </button>
+            ))}
+          </div>
+          <label className="field">
+            <span className="field-label">Minutes (optional)</span>
+            <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="20" />
+          </label>
+          <label className="field">
+            <span className="field-label">Optional note</span>
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
         </section>
       )}

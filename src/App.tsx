@@ -6,6 +6,7 @@ import { appointmentAlerts } from './domain/appointmentAlerts'
 import { Appointment as AppointmentSchema, type Appointment } from './domain/appointments'
 import { buildAgenda, type CalendarEvent } from './domain/calendar'
 import { napForecast } from './domain/analytics'
+import type { ActivityType } from './domain/activities'
 import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { smartAlerts } from './domain/notifications'
@@ -69,6 +70,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [birth, setBirth] = useState('')
   const [unit, setUnit] = useState<Unit>('oz')
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
+  const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
@@ -109,6 +111,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('birth').then((v) => v && setBirth(v))
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.listFeatures().then(setFeatureRows)
+    void store.listActivityTypes().then(setActivityTypes)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
@@ -214,7 +217,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     setToast(
       added.length
         ? {
-            text: `Logged: ${added.map((e) => eventTitle(e, unit)).join(', ')}`,
+            text: `Logged: ${added.map((e) => eventTitle(e, unit, activityTypes)).join(', ')}`,
             undo: added,
           }
         : { text: problems[0] ?? 'Nothing to log' },
@@ -234,7 +237,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     const { drafts, unsure } = await capture.capture(text, new Date(nowMs()))
     const { added, problems } = await logAll(drafts)
     const parts = [
-      added.length ? `Logged ${added.map((e) => eventTitle(e, unit)).join(', ')}` : '',
+      added.length ? `Logged ${added.map((e) => eventTitle(e, unit, activityTypes)).join(', ')}` : '',
       ...problems,
       ...unsure.map((u) => `Not logged: "${u}"`),
     ].filter(Boolean)
@@ -275,7 +278,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     for (const e of list) await store.remove(e.id)
     refresh()
     setToast({
-      text: list.length > 1 ? 'Deleted sleep' : `Deleted ${eventTitle(list[0], unit)}`,
+      text: list.length > 1 ? 'Deleted sleep' : `Deleted ${eventTitle(list[0], unit, activityTypes)}`,
     })
   }
 
@@ -297,7 +300,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         {
           role: 'agent',
           text: res.reply,
-          logged: added.map((e) => eventTitle(e, unit)),
+          logged: added.map((e) => eventTitle(e, unit, activityTypes)),
         },
       ])
     } catch (err) {
@@ -362,6 +365,17 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     setTimer(t)
     setNow(nowMs())
     void store.setSetting('nursing', JSON.stringify(t))
+  }
+
+  async function addActivityType(label: string): Promise<ActivityType | undefined> {
+    try {
+      const added = await store.addActivityType(label)
+      setActivityTypes(await store.listActivityTypes())
+      return added
+    } catch (err) {
+      setToast({ text: err instanceof Error ? err.message : "Couldn't add that activity" })
+      return undefined
+    }
   }
 
   function openLog(t: LogTab) {
@@ -439,6 +453,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             baby={baby}
             now={now}
             unit={unit}
+            activityTypes={activityTypes}
+            on={on}
+            onAddActivityType={addActivityType}
             tab={logTab}
             onTab={setLogTab}
             onUnit={changeUnit}
@@ -452,7 +469,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           />
         )}
         {tab === 'timeline' && on('timeline') && (
-          <Timeline events={events} now={now} unit={unit} baby={baby} onDelete={(list) => void remove(list)} onEdit={setEditing} />
+          <Timeline events={events} now={now} unit={unit} baby={baby} activityTypes={activityTypes} on={on} onDelete={(list) => void remove(list)} onEdit={setEditing} />
         )}
         {tab === 'analytics' && on('analytics') && (
           <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
@@ -533,7 +550,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         </div>
       )}
 
-      {editing && <EditSheet events={editing} unit={unit} onSave={saveEdit} onClose={() => setEditing(null)} />}
+      {editing && <EditSheet events={editing} unit={unit} types={activityTypes} onSave={saveEdit} onClose={() => setEditing(null)} />}
 
       {sheet === 'handoff' && (
         <Sheet

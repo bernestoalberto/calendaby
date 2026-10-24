@@ -4,11 +4,12 @@ import type { BabyEvent } from '../domain/events'
 import { sleepSessions, summarizeDay } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import { Badge, Segmented } from './controls'
-import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, SunIcon, TrashIcon } from './icons'
+import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, PumpIcon, SunIcon, TrashIcon } from './icons'
+import type { ActivityType } from '../domain/activities'
 import { clock, eventDetail, eventHeading } from './kinds'
 import { duration, type Unit } from './time'
 
-type Filter = 'all' | 'sleep' | 'feed' | 'diaper' | 'med'
+type Filter = 'all' | 'sleep' | 'feed' | 'diaper' | 'med' | 'activity'
 
 type Item =
   | { type: 'sleep'; at: number; start: number; end?: number; events: BabyEvent[] }
@@ -20,11 +21,13 @@ interface Props {
   now: number
   unit: Unit
   baby: string
+  activityTypes: ActivityType[]
+  on: (feature: string) => boolean
   onDelete: (events: BabyEvent[]) => void
   onEdit: (events: BabyEvent[]) => void
 }
 
-export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
+export function Timeline({ events, now, unit, baby, activityTypes, on, onDelete, onEdit }: Props) {
   const today = startOfDay(now)
   const [day, setDay] = useState(today)
   const [filter, setFilter] = useState<Filter>('all')
@@ -60,6 +63,7 @@ export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
   const shown = items.filter((i) => {
     if (filter === 'all') return true
     if (filter === 'sleep') return i.type === 'sleep' || i.type === 'wake'
+    if (filter === 'activity') return i.type === 'event' && (i.event.kind === 'activity' || i.event.kind === 'pump')
     return i.type === 'event' && i.event.kind === filter
   })
 
@@ -172,6 +176,9 @@ export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
             { value: 'feed', label: <><BottleIcon width={16} height={16} /> Feeds</> },
             { value: 'diaper', label: <><DiaperIcon width={16} height={16} /> Diapers</> },
             { value: 'med', label: <><PillIcon width={16} height={16} /> Meds</> },
+            ...(on('activities') || on('pumping')
+              ? [{ value: 'activity' as const, label: <><FaceIcon width={16} height={16} /> Activities</> }]
+              : []),
           ]}
         />
       </div>
@@ -220,7 +227,7 @@ export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
                 <span className={`thread-dot ${e.kind}`}>{kindIcon(e)}</span>
                 <div className="card event">
                   <div className="event-head">
-                    <h4>{eventHeading(e)}</h4>
+                    <h4>{eventHeading(e, activityTypes)}</h4>
                     <time>{clock(e.at)}</time>
                   </div>
                   {e.kind !== 'note' && <p>{eventDetail(e, unit)}</p>}
@@ -236,8 +243,8 @@ export function Timeline({ events, now, unit, baby, onDelete, onEdit }: Props) {
                   ) : null}
                   {e.note && <p className={e.kind === 'note' ? '' : 'event-note'}>{e.note}</p>}
                   <p className="by">by {e.loggedBy}</p>
-                  <EditButton label={`Edit ${eventHeading(e)}`} onClick={() => onEdit([e])} />
-                  <DeleteButton label={`Delete ${eventHeading(e)}`} onClick={() => onDelete([e])} />
+                  <EditButton label={`Edit ${eventHeading(e, activityTypes)}`} onClick={() => onEdit([e])} />
+                  <DeleteButton label={`Delete ${eventHeading(e, activityTypes)}`} onClick={() => onDelete([e])} />
                 </div>
               </li>
             )
@@ -256,6 +263,10 @@ function kindIcon(e: BabyEvent) {
       return <DiaperIcon width={18} height={18} />
     case 'med':
       return <PillIcon width={18} height={18} />
+    case 'activity':
+      return <FaceIcon width={18} height={18} />
+    case 'pump':
+      return <PumpIcon width={18} height={18} />
     default:
       return <NoteIcon width={18} height={18} />
   }

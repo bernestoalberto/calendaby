@@ -12,10 +12,12 @@ import {
   BulbIcon,
   ChevronRightIcon,
   DiaperIcon,
+  FaceIcon,
   MicIcon,
   MoonIcon,
   NoteIcon,
   PillIcon,
+  PumpIcon,
   SendIcon,
   ShareIcon,
   SparkIcon,
@@ -235,6 +237,28 @@ export function Today(p: Props) {
               <b>{p.day.changes === 1 ? '1 change' : `${p.day.changes} changes`}</b>
             </span>
           </div>
+          {p.on('activities') && p.day.tummyMinutes > 0 && (
+            <div>
+              <span className="mini-icon">
+                <FaceIcon />
+              </span>
+              <span>
+                <small>Tummy time</small>
+                <b>{formatMinutes(p.day.tummyMinutes)}</b>
+              </span>
+            </div>
+          )}
+          {p.on('pumping') && p.day.pumpMl > 0 && (
+            <div>
+              <span className="mini-icon">
+                <PumpIcon />
+              </span>
+              <span>
+                <small>Pumped</small>
+                <b>{formatAmount(p.day.pumpMl, p.unit)}</b>
+              </span>
+            </div>
+          )}
         </div>
       </section>
       )}

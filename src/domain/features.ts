@@ -15,6 +15,8 @@ export const DEFAULT_FEATURES: Omit<FeatureRow, 'enabled'>[] = [
   { id: 'lastCards', label: 'Last sleep, feed, diaper, medicine', hint: 'The four summary cards on Today', group: 'Today' },
   { id: 'totals', label: 'Totals for today', hint: 'Sleep goal, feeds and diapers', group: 'Today' },
   { id: 'handoff', label: 'Handoff brief', hint: 'The card on Today and the Profile button', group: 'Today' },
+  { id: 'activities', label: 'Tummy time & activities', hint: 'Tummy time, bath and play logging and totals', group: 'Log' },
+  { id: 'pumping', label: 'Pumping', hint: 'Pump sessions and milk totals', group: 'Log' },
   { id: 'timeline', label: 'Timeline', hint: 'Tab with every log', group: 'Tabs' },
   { id: 'analytics', label: 'Analytics', hint: 'Full stats and trends', group: 'Tabs' },
   { id: 'calendar', label: 'Calendar', hint: 'Doctor appointments from Gmail (needs sign-in)', group: 'Tabs' },

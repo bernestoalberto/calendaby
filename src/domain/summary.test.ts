@@ -25,7 +25,21 @@ describe('summarizeDay', () => {
       wet: 2,
       dirty: 1,
       changes: 2,
+      tummyMinutes: 0,
+      pumpMl: 0,
     })
+  })
+
+  it('totals tummy time and pumped milk, ignoring yesterday', () => {
+    const events = [
+      ev({ kind: 'activity', at: at(20, 0, 21), type: 'tummy', durationMin: 30 }),
+      ev({ kind: 'activity', at: at(8), type: 'tummy', durationMin: 6 }),
+      ev({ kind: 'activity', at: at(9), type: 'tummy', durationMin: 3 }),
+      ev({ kind: 'activity', at: at(9, 30), type: 'bath', durationMin: 15 }),
+      ev({ kind: 'pump', at: at(7), amountMl: 90 }),
+      ev({ kind: 'pump', at: at(9), amountMl: 60, side: 'both' }),
+    ]
+    expect(summarizeDay(events, new Date(at(10)))).toMatchObject({ tummyMinutes: 9, pumpMl: 150, feeds: 0 })
   })
 
   it('formats minutes', () => {

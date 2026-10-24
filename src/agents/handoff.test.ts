@@ -30,6 +30,20 @@ describe('buildHandoff', () => {
     )
   })
 
+  it('adds tummy time and pumping from the last 24 hours', () => {
+    const events = [
+      ev({ kind: 'activity', at: ago(300), type: 'tummy', durationMin: 5 }),
+      ev({ kind: 'activity', at: ago(100), type: 'tummy', durationMin: 3 }),
+      ev({ kind: 'activity', at: ago(90), type: 'bath' }),
+      ev({ kind: 'pump', at: ago(60), amountMl: 100 }),
+    ]
+    expect(buildHandoff(events, now).lines).toEqual([
+      'No feed logged yet',
+      'Tummy time 8 min today',
+      'Last pump 1 h ago (100 ml)',
+    ])
+  })
+
   it('handles an empty log', () => {
     expect(buildHandoff([], now)).toEqual({ headline: 'No sleep logged yet', lines: ['No feed logged yet'] })
   })

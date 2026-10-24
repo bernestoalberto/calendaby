@@ -50,7 +50,12 @@ function parseClause(clause: string, at: number): DraftEvent[] {
   const c = clause.toLowerCase()
   const out: DraftEvent[] = []
 
-  if (/\b(fed|feed|feeding|bottle|nursed|nursing|breastfed|breast|ate|eat|solids|puree)\b/.test(c)) {
+  const pump = parsePump(c, at)
+  if (pump) out.push(pump)
+  const activity = parseActivity(c, at)
+  if (activity) out.push(activity)
+
+  if (!pump && /\b(fed|feed|feeding|bottle|nursed|nursing|breastfed|breast|ate|eat|solids|puree)\b/.test(c)) {
     const method = /\b(nursed|nursing|breastfed|breast)\b/.test(c)
       ? 'breast'
       : /\b(ate|eat|solids|puree)\b/.test(c)
@@ -79,6 +84,32 @@ function parseClause(clause: string, at: number): DraftEvent[] {
   }
 
   return out
+}
+
+// Ids match the seeded `activity_types` rows; a custom type added in the app is logged by tapping it.
+const ACTIVITY_WORDS: [string, RegExp][] = [
+  ['tummy', /\btummy\b/],
+  ['bath', /\b(bath|bathed|bathing)\b/],
+  ['outdoor', /\b(outside|outdoors?|stroller walk|walk|park)\b/],
+  ['indoor', /\b(played|play time|playtime|playing)\b/],
+]
+
+function parsePump(c: string, at: number): DraftEvent | undefined {
+  if (!/\b(pump|pumped|pumping)\b/.test(c)) return undefined
+  const side = c.match(/\b(left|right|both)\b/)?.[1] as 'left' | 'right' | 'both' | undefined
+  return { kind: 'pump', at, amountMl: parseAmountMl(c), side, durationMin: parseDurationMin(c) }
+}
+
+function parseActivity(c: string, at: number): DraftEvent | undefined {
+  const found = ACTIVITY_WORDS.find(([, words]) => words.test(c))
+  return found && { kind: 'activity', at, type: found[0], durationMin: parseDurationMin(c) }
+}
+
+/** "5 min", "1 hour"; a time like "5 min ago" is not a duration. */
+function parseDurationMin(c: string): number | undefined {
+  const m = c.match(/(\d+)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b(?!\s+ago)/)
+  if (!m) return undefined
+  return m[2].startsWith('h') ? Number(m[1]) * 60 : Number(m[1])
 }
 
 function parseAmountMl(c: string): number | undefined {

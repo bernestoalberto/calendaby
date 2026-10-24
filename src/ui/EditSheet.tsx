@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { activityLabel, type ActivityType } from '../domain/activities'
 import { DraftEventSchema, type BabyEvent, type DraftEvent } from '../domain/events'
 import { Sheet } from './controls'
 import { eventHeading } from './kinds'
@@ -13,6 +14,7 @@ interface Props {
   /** One entry, or the start and end of a sleep. */
   events: BabyEvent[]
   unit: Unit
+  types: ActivityType[]
   onSave: (edits: EventEdit[]) => Promise<string | undefined>
   onClose: () => void
 }
@@ -23,7 +25,7 @@ const toMl = (value: string, unit: Unit) => (value.trim() === '' ? undefined : N
 const toInt = (value: string) => (value.trim() === '' ? undefined : Number(value))
 const toDraft = ({ id: _id, loggedBy: _by, ...rest }: BabyEvent) => rest as DraftEvent
 
-export function EditSheet({ events, unit, onSave, onClose }: Readonly<Props>) {
+export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Props>) {
   const [first] = events
   const [times, setTimes] = useState(() => events.map((e) => toLocalInput(e.at)))
   const [note, setNote] = useState(first.note ?? '')
@@ -36,6 +38,10 @@ export function EditSheet({ events, unit, onSave, onClose }: Readonly<Props>) {
   const [contents, setContents] = useState(first.kind === 'diaper' ? first.contents : 'wet')
   const [name, setName] = useState(first.kind === 'med' ? first.name : '')
   const [dose, setDose] = useState(first.kind === 'med' ? String(first.doseMl ?? '') : '')
+  const [activity, setActivity] = useState(first.kind === 'activity' ? first.type : '')
+  const [minutes, setMinutes] = useState(first.kind === 'activity' || first.kind === 'pump' ? String(first.durationMin ?? '') : '')
+  const [pumpAmount, setPumpAmount] = useState(first.kind === 'pump' ? toDisplay(first.amountMl, unit) : '')
+  const [pumpSide, setPumpSide] = useState(first.kind === 'pump' ? (first.side ?? '') : '')
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
 
@@ -60,6 +66,10 @@ export function EditSheet({ events, unit, onSave, onClose }: Readonly<Props>) {
         }
         if (e.kind === 'diaper') draft = { ...draft, contents }
         if (e.kind === 'med') draft = { ...draft, name: name.trim(), doseMl: toMl(dose, 'ml') }
+        if (e.kind === 'activity') draft = { ...draft, type: activity, durationMin: toInt(minutes) }
+        if (e.kind === 'pump') {
+          draft = { ...draft, amountMl: toMl(pumpAmount, unit), side: pumpSide || undefined, durationMin: toInt(minutes) }
+        }
       }
       const parsed = DraftEventSchema.safeParse(draft)
       if (!parsed.success) return parsed.error.issues[0]?.message ?? 'Check the values'
@@ -80,7 +90,7 @@ export function EditSheet({ events, unit, onSave, onClose }: Readonly<Props>) {
   const labels = first.kind === 'sleep' ? ['Fell asleep', 'Woke up'] : ['Time']
   return (
     <Sheet
-      title={`Edit ${events.length > 1 || first.kind === 'sleep' ? 'sleep' : eventHeading(first).toLowerCase()}`}
+      title={`Edit ${events.length > 1 || first.kind === 'sleep' ? 'sleep' : eventHeading(first, types).toLowerCase()}`}
       onClose={onClose}
       footer={
         <button type="button" className="pill primary wide tall" disabled={saving} onClick={() => void save()}>
@@ -166,6 +176,48 @@ export function EditSheet({ events, unit, onSave, onClose }: Readonly<Props>) {
             <label className="field">
               <span className="field-label">Dose (ml)</span>
               <input inputMode="decimal" value={dose} onChange={(e) => setDose(e.target.value)} />
+            </label>
+          </>
+        )}
+
+        {first.kind === 'activity' && (
+          <>
+            <label className="field">
+              <span className="field-label">Activity</span>
+              <select value={activity} onChange={(e) => setActivity(e.target.value)}>
+                {types.some((t) => t.id === activity) ? null : <option value={activity}>{activityLabel(types, activity)}</option>}
+                {types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Minutes</span>
+              <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            </label>
+          </>
+        )}
+
+        {first.kind === 'pump' && (
+          <>
+            <label className="field">
+              <span className="field-label">Amount ({unit})</span>
+              <input inputMode="decimal" value={pumpAmount} onChange={(e) => setPumpAmount(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Side</span>
+              <select value={pumpSide} onChange={(e) => setPumpSide(e.target.value)}>
+                <option value="">Not set</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="both">Both</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Minutes</span>
+              <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
             </label>
           </>
         )}

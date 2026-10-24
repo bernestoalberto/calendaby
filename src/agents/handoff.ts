@@ -57,6 +57,18 @@ export function buildHandoff(events: BabyEvent[], now: Date, windowHours = 8): H
     lines.push(`Gave ${med.name}${med.doseMl ? ` ${med.doseMl} ml` : ''} ${since(t - med.at)} ago`)
   }
 
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  const tummyMin = past
+    .filter((e) => e.at >= midnight.getTime())
+    .reduce((sum, e) => sum + (e.kind === 'activity' && e.type === 'tummy' ? (e.durationMin ?? 0) : 0), 0)
+  if (tummyMin) lines.push(`Tummy time ${tummyMin} min today`)
+
+  const lastPump = past.find((e) => e.kind === 'pump')
+  if (lastPump?.kind === 'pump' && t - lastPump.at <= 24 * HOUR) {
+    lines.push(`Last pump ${since(t - lastPump.at)} ago${lastPump.amountMl ? ` (${lastPump.amountMl} ml)` : ''}`)
+  }
+
   for (const e of recent) {
     if (e.note) lines.push(`Note: ${e.note}`)
   }

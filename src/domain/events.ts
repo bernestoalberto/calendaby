@@ -50,12 +50,30 @@ export const NoteEvent = z.object({
   note: z.string().min(1),
 })
 
+/** Tummy time, bath, play. `type` is an id from the `activity_types` table, so new ones need no code. */
+export const ActivityEvent = z.object({
+  ...base,
+  kind: z.literal('activity'),
+  type: z.string().min(1),
+  durationMin: z.number().int().positive().max(600).optional(),
+})
+
+export const PumpEvent = z.object({
+  ...base,
+  kind: z.literal('pump'),
+  amountMl: z.number().positive().max(600).optional(),
+  side: z.enum(['left', 'right', 'both']).optional(),
+  durationMin: z.number().int().positive().max(240).optional(),
+})
+
 export const BabyEvent = z.discriminatedUnion('kind', [
   FeedEvent,
   SleepEvent,
   DiaperEvent,
   MedEvent,
   NoteEvent,
+  ActivityEvent,
+  PumpEvent,
 ])
 export type BabyEvent = z.infer<typeof BabyEvent>
 export type EventKind = BabyEvent['kind']
@@ -76,4 +94,6 @@ export const DraftEventSchema = z.discriminatedUnion('kind', [
   DiaperEvent.omit(omitStored),
   MedEvent.omit(omitStored),
   NoteEvent.omit(omitStored),
+  ActivityEvent.omit(omitStored),
+  PumpEvent.omit(omitStored),
 ])

@@ -108,9 +108,11 @@ export async function runAgent(
 
   const recordEvents = tool({
     description:
-      'Record baby care events. Each item has kind (feed|sleep|diaper|med|note), at (ISO 8601 with UTC offset) ' +
+      'Record baby care events. Each item has kind (feed|sleep|diaper|med|note|activity|pump), at (ISO 8601 with UTC offset) ' +
       'and the fields for that kind: feed {method: bottle|breast|solids, amountMl?, side?: left|right|both}, ' +
-      'sleep {phase: start|end}, diaper {contents: wet|dirty|both}, med {name, doseMl?}, note {note}.',
+      'sleep {phase: start|end}, diaper {contents: wet|dirty|both}, med {name, doseMl?}, note {note}, ' +
+      'activity {type: tummy|bath|outdoor|indoor, durationMin?}, pump {amountMl?, side?: left|right|both, durationMin?}. ' +
+      'Pumping is not a feed: use pump, never feed, for milk the parent expressed.',
     inputSchema: z.object({ events: z.array(z.record(z.string(), z.unknown())) }),
     execute: ({ events }) => session.recordEvents(events),
   })

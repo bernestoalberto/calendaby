@@ -33,6 +33,24 @@ describe('SqliteEventStore', () => {
     )
   })
 
+  it('allows different activities within the duplicate window but not the same one', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.append({ kind: 'activity', at: 1_000_000, type: 'tummy', durationMin: 5 }, 'dad')
+    await expect(store.append({ kind: 'activity', at: 1_030_000, type: 'bath' }, 'dad')).resolves.toBeDefined()
+    await expect(store.append({ kind: 'activity', at: 1_060_000, type: 'tummy', durationMin: 5 }, 'mom')).rejects.toThrow(
+      DuplicateEventError,
+    )
+  })
+
+  it('seeds activity types in SQLite and keeps edits across reopen', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    expect((await store.listActivityTypes()).map((t) => t.id)).toEqual(['tummy', 'bath', 'outdoor', 'indoor'])
+    await store.addActivityType('Music time')
+    const again = await SqliteEventStore.open(driver)
+    expect((await again.listActivityTypes()).map((t) => [t.id, t.label]).at(-1)).toEqual(['music-time', 'Music time'])
+  })
+
   it('allows a sleep end right after a sleep start', async () => {
     const store = await SqliteEventStore.open(new NodeSqlDriver())
     await store.append({ kind: 'sleep', at: 1_000_000, phase: 'start' }, 'dad')
