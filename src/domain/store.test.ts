@@ -127,13 +127,20 @@ describe('SqliteEventStore', () => {
     await expect(store.update('nope', { kind: 'note', at: 1, note: 'x' })).rejects.toThrow()
   })
 
-  it('seeds features on and keeps a choice across reopen', async () => {
+  it('seeds features with their defaults and keeps a choice across reopen', async () => {
     const driver = new NodeSqlDriver()
     const store = await SqliteEventStore.open(driver)
-    expect((await store.listFeatures()).every((f) => f.enabled)).toBe(true)
+    const seeded = await store.listFeatures()
+    expect(seeded.filter((f) => !f.enabled).map((f) => f.id)).toEqual(['alertNapDue', 'alertWake', 'alertFeed', 'alertDiaper'])
     await store.setFeature('timeline', false)
     const rows = await (await SqliteEventStore.open(driver)).listFeatures()
     expect(rows.find((f) => f.id === 'timeline')?.enabled).toBe(false)
     expect(rows.find((f) => f.id === 'agent')?.enabled).toBe(true)
+  })
+
+  it('seeds the age norms table', async () => {
+    const norms = await (await SqliteEventStore.open(new NodeSqlDriver())).listAgeNorms()
+    expect(norms).toHaveLength(8)
+    expect(norms[0]).toEqual({ fromWeeks: 0, toWeeks: 4, wakeMinLow: 35, wakeMinHigh: 60, napsLow: 4, napsHigh: 8 })
   })
 })

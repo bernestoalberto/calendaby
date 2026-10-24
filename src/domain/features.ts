@@ -7,10 +7,10 @@ export interface FeatureRow {
   enabled: boolean
 }
 
-/** Seed for a fresh database: every feature starts on. Existing choices are never overwritten. */
-export const DEFAULT_FEATURES: Omit<FeatureRow, 'enabled'>[] = [
+/** Seed for a fresh database. Features start on unless `off` is set; existing choices are never overwritten. */
+export const DEFAULT_FEATURES: (Omit<FeatureRow, 'enabled'> & { off?: boolean })[] = [
   { id: 'napForecast', label: 'Next nap prediction', hint: 'The nap card on Today', group: 'Today' },
-  { id: 'insights', label: 'Smart predictions & advice', hint: 'Rhythm-based tips on Today', group: 'Today' },
+  { id: 'insights', label: 'Coming up & tonight', hint: 'Next nap, feed and bedtime with time ranges', group: 'Today' },
   { id: 'freeText', label: 'Type or speak to log', hint: 'The "say it" box on Today', group: 'Today' },
   { id: 'lastCards', label: 'Last sleep, feed, diaper, medicine', hint: 'The four summary cards on Today', group: 'Today' },
   { id: 'totals', label: 'Totals for today', hint: 'Sleep goal, feeds and diapers', group: 'Today' },
@@ -21,6 +21,12 @@ export const DEFAULT_FEATURES: Omit<FeatureRow, 'enabled'>[] = [
   { id: 'analytics', label: 'Analytics', hint: 'Full stats and trends', group: 'Tabs' },
   { id: 'calendar', label: 'Calendar', hint: 'Doctor appointments from Gmail (needs sign-in)', group: 'Tabs' },
   { id: 'agent', label: 'Assistant', hint: 'Ask-the-agent tab and buttons (needs sign-in)', group: 'Tabs' },
+  { id: 'alertWindDown', label: 'Nap wind-down', hint: '15 minutes before the nap window opens', group: 'Notifications' },
+  { id: 'alertBriefing', label: 'Morning briefing', hint: "One note with the day's outlook", group: 'Notifications' },
+  { id: 'alertNapDue', label: 'Nap overdue', hint: 'When the nap window has closed', group: 'Notifications', off: true },
+  { id: 'alertWake', label: 'Wake-up soon', hint: 'Before the usual nap length is reached', group: 'Notifications', off: true },
+  { id: 'alertFeed', label: 'Feed due', hint: 'At the usual feed gap', group: 'Notifications', off: true },
+  { id: 'alertDiaper', label: 'Diaper check', hint: 'After a long stretch with no change', group: 'Notifications', off: true },
 ]
 
 /** Lookup for the UI. A feature the database does not know about counts as on, so a new one never starts hidden. */

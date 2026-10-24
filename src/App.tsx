@@ -9,9 +9,11 @@ import { napForecast } from './domain/analytics'
 import type { ActivityType } from './domain/activities'
 import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
-import { smartAlerts } from './domain/notifications'
+import { briefingAlert, smartAlerts } from './domain/notifications'
+import { outlook } from './domain/outlook'
+import { ageInWeeks, normFor, type AgeNorm } from './domain/ageNorms'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
-import { deduceInsights, feedForecast, sleepForecast } from './domain/predictions'
+import { feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
 import { DEFAULT_THEME, parseTheme, type Theme } from './domain/theme'
@@ -78,6 +80,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
+  const [briefingTime, setBriefingTime] = useState('07:30')
+  const [ageNorms, setAgeNorms] = useState<AgeNorm[]>([])
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
   const [tab, setTab] = useState<Tab>('today')
@@ -123,6 +127,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       if (v && Number.isFinite(n) && n >= 0) setTummyGoal(n)
     })
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
+    void store.getSetting('briefingTime').then((v) => v && setBriefingTime(v))
+    void store.listAgeNorms().then(setAgeNorms)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
       if (parsed.success) setAppointments(parsed.data)
@@ -144,7 +150,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
-  const insights = useMemo(() => deduceInsights(events, baby, now), [events, baby, now])
+  const weeks = birth ? ageInWeeks(birth, now) : undefined
+  const view = useMemo(() => outlook(events, normFor(ageNorms, weeks), weeks, now), [events, ageNorms, weeks, now])
   const agenda = useMemo(
     () => buildAgenda(appointments, calEvents, sleepForecast(events, now), feedForecast(events, now), now),
     [appointments, calEvents, events, now],
@@ -159,9 +166,15 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   useEffect(() => {
     const active = reminders && notifAccess === 'granted'
     const at = nowMs()
-    const alerts = active ? [...smartAlerts(baby, events, at), ...appointmentAlerts(baby, appointments, events, at)] : []
+    const alerts = active
+      ? [
+          ...smartAlerts(baby, events, at, on),
+          ...(on('alertBriefing') ? [briefingAlert(baby, briefingTime, view.tonight, at)] : []),
+          ...appointmentAlerts(baby, appointments, events, at),
+        ]
+      : []
     void syncNapNotifications(active, alerts)
-  }, [reminders, notifAccess, baby, events, appointments])
+  }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight])
 
   async function loadCalendar() {
     const from = nowMs()
@@ -338,10 +351,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
-  function setSetting(key: 'baby' | 'birth' | 'caregiver', value: string) {
+  function setSetting(key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) {
     if (key === 'baby') setBaby(value)
     if (key === 'birth') setBirth(value)
     if (key === 'caregiver') setCaregiver(value)
+    if (key === 'briefingTime') setBriefingTime(value)
     void store.setSetting(key, value)
   }
 
@@ -453,7 +467,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             napsToday={day.naps}
             day={day}
             forecast={forecast}
-            insights={insights}
+            outlook={view}
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
             lastMed={lastOf('med')}
@@ -538,6 +552,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onTheme={changeTheme}
             persistent={store.persistent}
             reminders={reminders}
+            briefingTime={briefingTime}
             notifAccess={notifAccess}
             onSetting={setSetting}
             onUnit={changeUnit}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BabyEvent } from './events'
-import { DIAPER_CHECK_ID, FEED_DUE_ID, NAP_DUE_ID, NAP_LEAD_MS, NAP_SOON_ID, WAKE_SOON_ID, napAlerts, smartAlerts } from './notifications'
+import { BRIEFING_ID, DIAPER_CHECK_ID, FEED_DUE_ID, NAP_DUE_ID, NAP_LEAD_MS, NAP_SOON_ID, WAKE_SOON_ID, briefingAlert, napAlerts, smartAlerts } from './notifications'
 import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from './predictions'
 
 describe('napAlerts', () => {
@@ -96,9 +96,21 @@ describe('smart predictions, deductions, and alerts', () => {
 
     const alerts = smartAlerts('Maya', events, now)
     expect(alerts.map((a) => a.id)).toEqual([NAP_SOON_ID, NAP_DUE_ID, FEED_DUE_ID, DIAPER_CHECK_ID])
+    const defaults = smartAlerts('Maya', events, now, (f) => f === 'alertWindDown')
+    expect(defaults.map((a) => a.id)).toEqual([NAP_SOON_ID])
 
     const insights = deduceInsights(events, 'Maya', now)
     expect(insights.map((i) => i.id)).toContain('nap-prediction')
     expect(insights.map((i) => i.id)).toContain('feed-prediction')
+  })
+})
+
+describe('briefingAlert', () => {
+  it('schedules the next morning briefing with recent nights', () => {
+    const now = new Date(2026, 9, 22, 9, 0).getTime()
+    const alert = briefingAlert('Maya', '07:30', { nights: 3, nightFeeds: 2, longestStretchMin: 300 }, now)
+    expect(alert).toMatchObject({ id: BRIEFING_ID, at: new Date(2026, 9, 23, 7, 30).getTime() })
+    expect(alert.body).toContain('about 2 night feeds, longest stretch ~5h')
+    expect(briefingAlert('Maya', '07:30', undefined, new Date(2026, 9, 22, 6, 0).getTime()).at).toBe(new Date(2026, 9, 22, 7, 30).getTime())
   })
 })
