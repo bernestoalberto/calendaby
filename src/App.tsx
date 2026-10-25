@@ -11,12 +11,8 @@ import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
 import { outlook } from './domain/outlook'
-<<<<<<< HEAD
 import { normFor, type AgeNorm } from './domain/ageNorms'
 import { nextCheckups, weeksOld } from './knowledge/index'
-=======
-import { ageInWeeks, normFor, type AgeNorm } from './domain/ageNorms'
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
 import { feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
@@ -43,6 +39,7 @@ import { Profile } from './ui/Profile'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
 import { Timeline } from './ui/Timeline'
+import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { useSpeech } from './useSpeech'
 import './App.css'
@@ -102,6 +99,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
   const [calBusy, setCalBusy] = useState(false)
   const [calError, setCalError] = useState<string>()
+  const sync = useSync(store, account.signedIn === true, reload)
   const speech = useSpeech(
     (heard) => setText((t) => (t ? `${t}, ${heard}` : heard)),
     (message) => setToast({ text: message }),
@@ -155,12 +153,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
-<<<<<<< HEAD
   const weeks = weeksOld(birth, now)
   const checkup = weeks === undefined ? undefined : nextCheckups(weeks, 'us', 1)[0]
-=======
-  const weeks = birth ? ageInWeeks(birth, now) : undefined
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
   const view = useMemo(() => outlook(events, normFor(ageNorms, weeks), weeks, now), [events, ageNorms, weeks, now])
   const agenda = useMemo(
     () => buildAgenda(appointments, calEvents, sleepForecast(events, now), feedForecast(events, now), now),
@@ -228,9 +222,15 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.signedIn, tab])
 
-  function refresh() {
+  function reload() {
     setEvents(store.list())
     setNow(nowMs())
+  }
+
+  // Every local change goes up shortly after it is saved.
+  function refresh() {
+    reload()
+    sync.soon()
   }
 
   async function logAll(drafts: DraftEvent[]): Promise<{ added: BabyEvent[]; problems: string[] }> {
@@ -479,10 +479,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             day={day}
             forecast={forecast}
             outlook={view}
-<<<<<<< HEAD
             checkup={checkup && { ...checkup, around: new Date(`${birth}T00:00`).getTime() + checkup.at * 7 * 86_400_000 }}
-=======
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
             lastMed={lastOf('med')}
@@ -542,7 +539,6 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         {tab === 'calendar' && on('calendar') && (
           <Calendar
             signedIn={account.signedIn === true}
-            onSignIn={account.requestSignIn}
             now={now}
             agenda={agenda}
             pending={pending}
@@ -565,6 +561,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             unit={unit}
             theme={theme}
             onTheme={changeTheme}
+            syncStatus={sync.status}
+            onSyncNow={() => void sync.now()}
+            onMembership={() => void sync.now()}
             persistent={store.persistent}
             reminders={reminders}
             briefingTime={briefingTime}

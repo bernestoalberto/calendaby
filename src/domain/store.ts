@@ -38,7 +38,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -107,6 +107,28 @@ const MIGRATIONS: Record<number, string[]> = {
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i}, ${f.off ? 0 : 1})`,
     ),
   ],
+  // The outbox: one row per event with a change not yet sent. A new row number on every change lets a sync tell
+  // "sent what I read" from "edited again while sending". Everything already on the phone is queued once.
+  6: [
+    `CREATE TABLE IF NOT EXISTS sync_pending (
+      n INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      op TEXT NOT NULL CHECK (op IN ('put', 'delete'))
+    )`,
+    "INSERT OR IGNORE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at",
+  ],
+}
+
+/** What a phone has to send: events to upload, ids to delete, and the outbox rows these came from. */
+export interface PendingBatch {
+  events: BabyEvent[]
+  deleted: string[]
+  sent: { n: number; id: string }[]
+}
+
+export interface RemoteChange {
+  event: BabyEvent
+  deleted: boolean
 }
 
 /** The localStorage key the first MVP used; its events move into SQLite on first open. */
@@ -170,11 +192,17 @@ export class SqliteEventStore implements EventStore {
     })
   }
 
-  private insert(e: BabyEvent, verb: 'INSERT' | 'INSERT OR IGNORE' = 'INSERT'): Promise<void> {
-    return this.db.exec(
+  private async insert(e: BabyEvent, verb: 'INSERT' | 'INSERT OR IGNORE' = 'INSERT'): Promise<void> {
+    await this.db.exec(
       `${verb} INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
       [e.id, e.kind, e.at, e.loggedBy, JSON.stringify(e), Date.now()],
     )
+    await this.queue(e.id, 'put')
+  }
+
+  /** REPLACE gives the row a new number, so a sync in flight will not clear a change made after it read. */
+  private queue(id: string, op: 'put' | 'delete'): Promise<void> {
+    return this.db.exec('INSERT OR REPLACE INTO sync_pending (id, op) VALUES (?, ?)', [id, op])
   }
 
   list(): BabyEvent[] {
@@ -192,6 +220,7 @@ export class SqliteEventStore implements EventStore {
 
   async remove(id: string): Promise<void> {
     await this.db.exec('DELETE FROM events WHERE id = ?', [id])
+    await this.queue(id, 'delete')
     this.events = this.events.filter((e) => e.id !== id)
   }
 
@@ -201,8 +230,73 @@ export class SqliteEventStore implements EventStore {
     if (!existing) throw new Error('That entry no longer exists')
     const event = BabyEvent.parse({ ...draft, id, loggedBy: existing.loggedBy })
     await this.db.exec('UPDATE events SET kind = ?, at = ?, body = ? WHERE id = ?', [event.kind, event.at, JSON.stringify(event), id])
+    await this.queue(id, 'put')
     this.events = this.events.map((e) => (e.id === id ? event : e)).sort((a, b) => a.at - b.at)
     return event
+  }
+
+  /** Up to `limit` unsent changes, oldest first. */
+  async pending(limit: number): Promise<PendingBatch> {
+    const rows = await this.db.query<{ n: number; id: string; op: string; body: string | null }>(
+      `SELECT p.n, p.id, p.op, e.body FROM sync_pending p LEFT JOIN events e ON e.id = p.id ORDER BY p.n LIMIT ?`,
+      [limit],
+    )
+    const batch: PendingBatch = { events: [], deleted: [], sent: [] }
+    for (const r of rows) {
+      batch.sent.push({ n: r.n, id: r.id })
+      if (r.op === 'delete') batch.deleted.push(r.id)
+      else {
+        const parsed = r.body === null ? undefined : BabyEvent.safeParse(JSON.parse(r.body))
+        if (parsed?.success) batch.events.push(parsed.data)
+      }
+    }
+    return batch
+  }
+
+  /** Clears what the server has taken. A row that changed since it was read has a new number and stays. */
+  async markSynced(sent: PendingBatch['sent']): Promise<void> {
+    for (const { n, id } of sent) await this.db.exec('DELETE FROM sync_pending WHERE n = ? AND id = ?', [n, id])
+  }
+
+  /**
+   * Applies what other phones changed. An event with an unsent local change is skipped: that change goes up next
+   * and wins, as the later save. Nothing here is queued, or it would bounce back to the server.
+   */
+  async applyRemote(changes: RemoteChange[]): Promise<number> {
+    let applied = 0
+    for (const { event, deleted } of changes) {
+      const [waiting] = await this.db.query<{ n: number }>('SELECT n FROM sync_pending WHERE id = ?', [event.id])
+      if (waiting) continue
+      if (deleted) {
+        await this.db.exec('DELETE FROM events WHERE id = ?', [event.id])
+        this.events = this.events.filter((e) => e.id !== event.id)
+      } else {
+        await this.db.exec(
+          'INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [event.id, event.kind, event.at, event.loggedBy, JSON.stringify(event), Date.now()],
+        )
+        this.events = [...this.events.filter((e) => e.id !== event.id), event].sort((a, b) => a.at - b.at)
+      }
+      applied++
+    }
+    return applied
+  }
+
+  /** The household this phone last synced with and the last change number it saw there. */
+  async syncState(): Promise<{ household: string | undefined; seq: number }> {
+    const seq = Number(await this.getSetting('syncSeq'))
+    return { household: await this.getSetting('syncHousehold'), seq: Number.isInteger(seq) && seq > 0 ? seq : 0 }
+  }
+
+  async setSyncState(household: string, seq: number): Promise<void> {
+    await this.setSetting('syncHousehold', household)
+    await this.setSetting('syncSeq', String(seq))
+  }
+
+  /** A different household: forget the position and send everything on this phone there. */
+  async resetSync(household: string): Promise<void> {
+    await this.setSyncState(household, 0)
+    await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
   }
 
   async listFeatures(): Promise<FeatureRow[]> {

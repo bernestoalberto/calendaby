@@ -95,13 +95,13 @@ export function mountSharing(app: Hono<Env>, provider: SharedProvider) {
       const stored = await store.putEvents(householdId, events)
       let removed = 0
       for (const id of deleted) removed += Number(await store.deleteEvent(householdId, id))
-      return { stored, removed }
+      return { household: householdId, stored, removed }
     },
   )
 
   route(
     'pullChanges',
     z.strictObject({ since: z.number().int().nonnegative() }),
-    ({ store, householdId }, { since }) => store.changesSince(householdId, since),
+    async ({ store, householdId }, { since }) => ({ household: householdId, ...(await store.changesSince(householdId, since)) }),
   )
 }

@@ -1990,3 +1990,9 @@ button.insight-row {
 .section-style > summary span:first-child {
   display: grid;
 }
+
+.invite-code {
+  font-size: 1.4em;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}

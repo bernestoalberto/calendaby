@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-<<<<<<< HEAD
 import { DEFAULT_AGE_NORMS, ageLabel, normFor } from './ageNorms'
-=======
-import { DEFAULT_AGE_NORMS, ageInWeeks, ageLabel, normFor } from './ageNorms'
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
 import type { BabyEvent, DraftEvent } from './events'
 import { outlook, quantile, tonight } from './outlook'
 
@@ -37,11 +33,6 @@ describe('quantile', () => {
 
 describe('age norms', () => {
   it('finds the band for an age and labels it', () => {
-<<<<<<< HEAD
-=======
-    expect(ageInWeeks('2026-06-01', at(12))).toBe(20)
-    expect(ageInWeeks('2027-01-01', at(12))).toBeUndefined()
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
     expect(normFor(DEFAULT_AGE_NORMS, 20)).toMatchObject({ wakeMinLow: 105, wakeMinHigh: 150 })
     expect(ageLabel(6)).toBe('6 weeks')
     expect(ageLabel(20)).toBe('4 months')

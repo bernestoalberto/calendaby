@@ -144,3 +144,78 @@ describe('SqliteEventStore', () => {
     expect(norms[0]).toEqual({ fromWeeks: 0, toWeeks: 4, wakeMinLow: 35, wakeMinHigh: 60, napsLow: 4, napsHigh: 8 })
   })
 })
+
+describe('sync outbox', () => {
+  const feed = { kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 } as const
+
+  it('queues what is logged, edited and removed, and sends one entry per event', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const a = await store.append(feed, 'dad')
+    await store.update(a.id, { ...feed, amountMl: 150 })
+    let batch = await store.pending(200)
+    expect(batch.events).toHaveLength(1)
+    expect(batch.events[0]).toMatchObject({ id: a.id, amountMl: 150 })
+    await store.markSynced(batch.sent)
+    expect((await store.pending(200)).sent).toEqual([])
+
+    await store.remove(a.id)
+    batch = await store.pending(200)
+    expect(batch.events).toEqual([])
+    expect(batch.deleted).toEqual([a.id])
+  })
+
+  it('keeps a change made while a sync was in flight', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const a = await store.append(feed, 'dad')
+    const batch = await store.pending(200)
+    await store.update(a.id, { ...feed, amountMl: 90 })
+    await store.markSynced(batch.sent)
+    expect((await store.pending(200)).events[0]).toMatchObject({ amountMl: 90 })
+  })
+
+  it('queues events that were already on the phone when sync arrived', async () => {
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver)
+    const old = { id: 'old1', kind: 'note', at: 5_000, loggedBy: 'dad', note: 'before sync' }
+    driver.db.exec('DROP TABLE sync_pending; PRAGMA user_version = 5')
+    driver.db.prepare('INSERT INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      old.id, old.kind, old.at, old.loggedBy, JSON.stringify(old), 1,
+    )
+    const store = await SqliteEventStore.open(driver)
+    expect((await store.pending(200)).events.map((e) => e.id)).toEqual(['old1'])
+  })
+
+  it('applies changes from another phone without queueing them back', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const remote = { ...feed, id: 'r1', loggedBy: 'mom' }
+    expect(await store.applyRemote([{ event: remote, deleted: false }])).toBe(1)
+    expect(store.list().map((e) => e.id)).toEqual(['r1'])
+    expect((await store.pending(200)).sent).toEqual([])
+
+    await store.applyRemote([{ event: remote, deleted: true }])
+    expect(store.list()).toEqual([])
+    expect((await store.pending(200)).sent).toEqual([])
+  })
+
+  it('does not overwrite a local change that has not been sent yet', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const a = await store.append(feed, 'dad')
+    await store.update(a.id, { ...feed, amountMl: 99 })
+    expect(await store.applyRemote([{ event: { ...feed, id: a.id, loggedBy: 'dad', amountMl: 10 }, deleted: false }])).toBe(0)
+    expect(store.list()[0]).toMatchObject({ amountMl: 99 })
+  })
+
+  it('remembers where it got to, per household, and starts over for a new one', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const a = await store.append(feed, 'dad')
+    await store.markSynced((await store.pending(200)).sent)
+    expect(await store.syncState()).toEqual({ household: undefined, seq: 0 })
+    await store.setSyncState('h1', 7)
+    expect(await store.syncState()).toEqual({ household: 'h1', seq: 7 })
+
+    await store.resetSync('h2')
+    expect(await store.syncState()).toEqual({ household: 'h2', seq: 0 })
+    expect((await store.pending(200)).events.map((e) => e.id)).toEqual([a.id])
+  })
+})
+

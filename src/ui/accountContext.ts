@@ -5,8 +5,6 @@ export interface AccountInfo {
   /** First name from the signed-in account; undefined when signed out or sign-in is not configured. */
   name?: string
   email?: string
-  /** Set when Clerk is configured but the user skipped sign-in; returns to the sign-in screen. */
-  requestSignIn?: () => void
 }
 
 export const AccountContext = createContext<AccountInfo>({})

@@ -4,6 +4,8 @@ import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
 import { Appearance } from './Appearance'
 import { Badge, Segmented } from './controls'
+import { Family } from './Family'
+import type { SyncStatus } from './useSync'
 import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { babyAge, type Unit } from './time'
 
@@ -16,6 +18,9 @@ interface Props {
   birth: string
   caregiver: string
   unit: Unit
+  syncStatus: SyncStatus
+  onSyncNow: () => void
+  onMembership: () => void
   theme: Theme
   onTheme: (t: Theme) => void
   persistent: boolean
@@ -66,6 +71,7 @@ export function Profile(p: Readonly<Props>) {
       </section>
 
       {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? <Account /> : null}
+      <Family caregiver={p.caregiver} status={p.syncStatus} onSyncNow={p.onSyncNow} onMembership={p.onMembership} />
 
       <section className="card">
         <div className="card-head">

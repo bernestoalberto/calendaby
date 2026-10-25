@@ -22,15 +22,6 @@ export const DEFAULT_AGE_NORMS: AgeNorm[] = [
   { fromWeeks: 61, toWeeks: 105, wakeMinLow: 300, wakeMinHigh: 360, napsLow: 1, napsHigh: 1 },
 ]
 
-<<<<<<< HEAD
-=======
-export function ageInWeeks(birth: string, now: number): number | undefined {
-  const b = new Date(`${birth}T00:00`).getTime()
-  if (Number.isNaN(b) || b > now) return undefined
-  return Math.floor((now - b) / (7 * 86_400_000))
-}
-
->>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
 export function normFor(norms: AgeNorm[], weeks: number | undefined): AgeNorm | undefined {
   if (weeks === undefined) return undefined
   return norms.find((n) => weeks >= n.fromWeeks && weeks < n.toWeeks)
