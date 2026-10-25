@@ -6,6 +6,7 @@ import { authenticate, type Verifier } from './auth.js'
 import { openDb, type Db } from './db.js'
 import { GoogleError } from './gmail.js'
 import { operations } from './operations.js'
+import { mountSharing, type Env, type SharedProvider } from './sharing.js'
 
 /** Finds proposed appointments in the user's mail. Injected so tests never touch Gmail or a model. */
 export type Importer = (userId: string, now: string) => Promise<Appointment[]>
@@ -14,13 +15,14 @@ export interface AppOptions {
   verify?: Verifier
   importer?: Importer
   calendar?: (userId: string, from: number, to: number) => Promise<CalEvent[]>
+  shared?: SharedProvider
 }
 
 const ImportInput = z.strictObject({ now: z.string().min(1) })
 const CalendarInput = z.strictObject({ from: z.number().int().nonnegative(), to: z.number().int().positive() })
 
-export function createApp(db: Db, { verify, importer, calendar }: AppOptions = {}) {
-  const app = new Hono<{ Variables: { userId: string | null } }>()
+export function createApp(db: Db, { verify, importer, calendar, shared }: AppOptions = {}) {
+  const app = new Hono<Env>()
   app.use('*', async (c, next) => {
     const auth = await authenticate(c.req.raw, verify)
     if (auth instanceof Response) return auth
@@ -61,11 +63,12 @@ export function createApp(db: Db, { verify, importer, calendar }: AppOptions = {
       return c.json({ error: err instanceof GoogleError ? err.message : 'Could not read Google Calendar' }, 502)
     }
   })
+  if (shared) mountSharing(app, shared)
   return app
 }
 
-let shared: Db | undefined
+let sharedDbInstance: Db | undefined
 
 export function sharedDb(): Db {
-  return (shared ??= openDb())
+  return (sharedDbInstance ??= openDb())
 }

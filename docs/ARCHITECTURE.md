@@ -19,6 +19,33 @@
 - **Sync:** each `/api/agent` call includes the app's latest 500 events. The agent inserts them into the backend (by id, so repeats are ignored) before it runs. The app does not write to the backend directly yet.
 - **Ask:** the Agent screen sends the question in `chat` mode. The agent reads the backend log for questions about the day and answers general baby-care questions from its own knowledge. It points to the pediatrician for anything worrying. Event times reach the model in the parent's local time.
 
+## Shared household
+
+Each caregiver signs in with their own Google account through Clerk. A **household** links the accounts to one set of data. Plan and phases: [PLAN_SHARING.md](PLAN_SHARING.md).
+
+```text
+ Mom's phone                      Vercel                      Dad's phone
+┌───────────────┐         ┌──────────────────┐         ┌───────────────┐
+│ UI            │         │ /api/backend/*   │         │ UI            │
+│ SQLite (local)│─ push ─▶│ verify Clerk     │◀─ push ─│ SQLite (local)│
+│ outbox        │         │ token -> user    │         │ outbox        │
+│ lastSeq       │◀─ pull ─│ user -> household│─ pull ─▶│ lastSeq       │
+└───────────────┘         │ scoped query     │         └───────────────┘
+                          └────────┬─────────┘
+                                   ▼
+                  Turso (libSQL): household(id, seq)  member(user_id, role)
+                  invite(code_hash, expiry)  event(household_id, id, body, seq, deleted_at)
+```
+
+- Each phone reads and writes only its own SQLite and works offline. Changes wait in an outbox until they can be sent.
+- The server numbers every change for the household (`seq`). A phone remembers the last number it saw and asks for everything after it.
+- The household always comes from the verified sign-in, never from the request, so one family cannot see another's data.
+- Event ids are unique, so an entry arriving twice is stored once. Deletes are tombstones. Concurrent edits to one entry: the later save wins.
+- Phones check after each local change, on app open, every 30 seconds while open, and when the network returns. There is no WebSocket or push.
+- Joining: the owner creates a 6-character code (hashed, single use, 48 hours, guess lockout). The second parent signs in, sees whose household it is, accepts, and pulls the history. The owner can remove a member; logs stay.
+- Shared: events, baby name, birth date and tummy goal. Per phone: theme, feature switches, units, reminders, display name.
+- The assistant reads the household's events from the database, so every caregiver gets answers from the same history.
+
 ## Models
 
 OpenRouter only. `MODEL_NAME` picks the model (default `openai/gpt-6-luna`, low reasoning effort). The key comes from the `OPEN_ROUTER_API` environment variable or `.env.local`. Without the key `/api/agent` returns 503 and the app shows the assistant as offline; logging still works.
@@ -52,6 +79,7 @@ Import the repo, set `OPEN_ROUTER_API`, optionally `MODEL_NAME`, and `AGENT_ALLO
 - Backend operations are the agent's tools, so the API and the tools cannot drift apart.
 - Rules first, model second: most entries cost nothing and work offline.
 - Parent text is data, never instructions; the agent is not a doctor.
+- Sync: the household is the sync unit. Device SQLite stays the thing the app reads; a hosted libSQL (Turso) database holds changes per household, numbered so each phone can ask for what it has not seen. Chosen over Postgres because the schema and tests match the device and backend SQLite; chosen over WebSockets and push for simplicity; each caregiver keeps their own login.
 
 ## Changelog
 
@@ -61,3 +89,4 @@ Import the repo, set `OPEN_ROUTER_API`, optionally `MODEL_NAME`, and `AGENT_ALLO
 - Added the backend and made `listEvents` an agent tool; moved the agent to OpenRouter.
 - Added the Agent screen, general baby questions, Husky pre-commit and Playwright tests.
 - Fixed the Agent screen crash (scroll effect) and the two-tab database clash.
+- Added shared household storage (`backend/household.ts`): households, members, invite codes, scoped, numbered, tombstoned events. Not wired to the app yet.

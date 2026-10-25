@@ -4,9 +4,21 @@ import { handle } from 'hono/vercel'
 import { gmailImporter } from '../../agent/appointments.js'
 import { createApp, sharedDb } from '../../backend/app.js'
 import { userCalendar } from '../../backend/calendar.js'
+import { openShared, type SharedStore } from '../../backend/household.js'
 
 // Same origins as api/agent.ts: the web app, plus the Capacitor shells that call us cross-origin.
 const NATIVE_ORIGINS = new Set(['https://localhost', 'capacitor://localhost'])
+
+let opening: Promise<SharedStore> | undefined
+
+// A failed open (Turso not configured, network) is retried on the next request instead of cached.
+function sharedStore(): Promise<SharedStore> {
+  opening ??= openShared().catch((err: unknown) => {
+    opening = undefined
+    throw err
+  })
+  return opening
+}
 
 function handler() {
   const root = new Hono()
@@ -19,7 +31,7 @@ function handler() {
     }),
   )
   // route() mounts under the prefix; basePath() would not re-prefix routes createApp already registered (404).
-  root.route('/api/backend', createApp(sharedDb(), { importer: gmailImporter, calendar: userCalendar }))
+  root.route('/api/backend', createApp(sharedDb(), { importer: gmailImporter, calendar: userCalendar, shared: sharedStore }))
   return handle(root)
 }
 
