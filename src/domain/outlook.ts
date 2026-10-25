@@ -1,8 +1,8 @@
-import { NIGHT_END_HOUR, NIGHT_START_HOUR, addDays, startOfDay } from './analytics'
-import { ageLabel, type AgeNorm } from './ageNorms'
-import type { BabyEvent } from './events'
-import { feedForecast } from './predictions'
-import { formatMinutes, sleepSessions, type SleepSession } from './summary'
+import { NIGHT_END_HOUR, NIGHT_START_HOUR, addDays, startOfDay } from './analytics.js'
+import { ageLabel, type AgeNorm } from './ageNorms.js'
+import type { BabyEvent } from './events.js'
+import { feedForecast } from './predictions.js'
+import { formatMinutes, sleepSessions, type SleepSession } from './summary.js'
 
 /** Where a range came from: the baby's own logs, the age table, or both when there is little data. */
 export type Basis = 'own' | 'age' | 'blend'

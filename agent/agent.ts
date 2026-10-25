@@ -5,7 +5,9 @@ import { operations } from '../backend/operations.js'
 import type { Db } from '../backend/db.js'
 import type { AgentRequest, AgentResponse } from '../src/agents/remote.js'
 import { googleTools, type Google } from './google.js'
+import { DEFAULT_AGE_NORMS, normFor } from '../src/domain/ageNorms.js'
 import { dailyStats } from '../src/domain/analytics.js'
+import { outlook } from '../src/domain/outlook.js'
 import { DraftEventSchema, type DraftEvent } from '../src/domain/events.js'
 import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from '../src/domain/predictions.js'
 import { GUIDE_RULES, guide, screen, TOPIC_NAMES, weeksOld } from '../src/knowledge/index.js'
@@ -51,6 +53,7 @@ const CHAT = (now: string, google = false) => `
 You help a parent, often a dad mid-shift, with questions, predictions, and advice about their baby. The current local time is ${now}.
 For questions about their baby's day, schedule, predictions, or advice, call getPredictions and listEvents first, and cite specific times, amounts, and patterns from their logs.
 Deduce patterns from the baby's own history (wake windows, nap lengths, feeding intervals, usual bottle volume or next nursing side, bedtime sweet-spot) and give brief, practical, supportive advice.
+For "when will" or "when is the next" questions, use getOutlook and state only the times and ranges it returns, with their basis.
 For general baby-care questions (sleep, feeding, solids, diapers, development, checkups, warning signs), use pediatric_guide.
 Be brief and kind.
 If the parent tells you something that happened, log it with record_events.
@@ -172,6 +175,25 @@ export async function runAgent(
     },
   })
 
+  const getOutlook = tool({
+    description:
+      "The baby's expected next nap, wake, feed and bedtime as time ranges, plus tonight's pattern. Each range says whether it comes from the baby's own logs, age norms or both. Use it for 'when will', 'when is the next' and bedtime questions.",
+    inputSchema: z.object({}),
+    execute: () => {
+      const nowMs = session.now.getTime()
+      const all = operations.listEvents.run(db, { since: nowMs - 14 * 24 * 3_600_000 })
+      const weeks = weeksOld(req.birth, nowMs)
+      const { items, tonight } = outlook(all, normFor(DEFAULT_AGE_NORMS, weeks), weeks, nowMs)
+      return {
+        items: items.map((i) => ({ ...i, from: localTime(i.from, req.now), to: localTime(i.to, req.now) })),
+        tonight: tonight && {
+          ...tonight,
+          bedtimeFrom: tonight.bedtimeFrom && localTime(tonight.bedtimeFrom, req.now),
+          bedtimeTo: tonight.bedtimeTo && localTime(tonight.bedtimeTo, req.now),
+        },
+      }
+    },
+  })
   const ageWeeks = weeksOld(req.birth, Date.parse(req.now))
   const pediatricGuide = tool({
     description:
@@ -196,6 +218,7 @@ export async function runAgent(
       req.mode === 'chat'
         ? {
             getPredictions,
+            getOutlook,
             listEvents,
             record_events: recordEvents,
             pediatric_guide: pediatricGuide,
