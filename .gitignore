@@ -34,3 +34,4 @@ playwright-report
 _*
 calendaby.bundle
 design
+.env*

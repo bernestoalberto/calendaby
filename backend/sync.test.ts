@@ -167,7 +167,7 @@ describe('two phones, two accounts, one household', () => {
     const second = await syncOnce(mom, callAs('tok_mom'))
     expect(second.settingsChanged).toBe(true)
     expect(await mom.getSetting('tummyGoal')).toBe('45')
-    expect(await mom.getSetting('unit')).toBeUndefined()
+    expect(await mom.getSetting('unit')).toBe('oz')
     expect((await syncOnce(mom, callAs('tok_mom'))).settingsChanged).toBe(false)
   })
 
