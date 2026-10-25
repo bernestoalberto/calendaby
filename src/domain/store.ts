@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { SqlDriver } from '../db/driver'
 import { BabyEvent, type DraftEvent } from './events'
 import { activityId, DEFAULT_ACTIVITY_TYPES, type ActivityType } from './activities'
+import { DEFAULT_AGE_NORMS, type AgeNorm } from './ageNorms'
 import { DEFAULT_FEATURES, type FeatureRow } from './features'
 
 export interface EventStore {
@@ -37,7 +38,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -63,7 +64,7 @@ const MIGRATIONS: Record<number, string[]> = {
       sort INTEGER NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1
     )`,
-    ...DEFAULT_FEATURES.map(
+    ...DEFAULT_FEATURES.filter((f) => !f.off).map(
       (f, i) =>
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
     ),
@@ -78,7 +79,7 @@ const MIGRATIONS: Record<number, string[]> = {
       (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
     ),
     // Installs from before v3 get the activity and pumping switches (on); rows they already have are left alone.
-    ...DEFAULT_FEATURES.map(
+    ...DEFAULT_FEATURES.filter((f) => !f.off).map(
       (f, i) =>
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
     ),
@@ -87,6 +88,25 @@ const MIGRATIONS: Record<number, string[]> = {
   4: DEFAULT_ACTIVITY_TYPES.map(
     (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
   ),
+  5: [
+    `CREATE TABLE IF NOT EXISTS age_norms (
+      from_weeks INTEGER PRIMARY KEY,
+      to_weeks INTEGER NOT NULL,
+      wake_min_low INTEGER NOT NULL,
+      wake_min_high INTEGER NOT NULL,
+      naps_low INTEGER NOT NULL,
+      naps_high INTEGER NOT NULL
+    )`,
+    ...DEFAULT_AGE_NORMS.map(
+      (n) =>
+        `INSERT OR IGNORE INTO age_norms VALUES (${[n.fromWeeks, n.toWeeks, n.wakeMinLow, n.wakeMinHigh, n.napsLow, n.napsHigh].join(', ')})`,
+    ),
+    "UPDATE features SET label = 'Coming up & tonight', hint = 'Next nap, feed and bedtime with time ranges' WHERE id = 'insights'",
+    ...DEFAULT_FEATURES.map(
+      (f, i) =>
+        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i}, ${f.off ? 0 : 1})`,
+    ),
+  ],
 }
 
 /** The localStorage key the first MVP used; its events move into SQLite on first open. */
@@ -194,6 +214,13 @@ export class SqliteEventStore implements EventStore {
 
   async setFeature(id: string, enabled: boolean): Promise<void> {
     await this.db.exec('UPDATE features SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, id])
+  }
+
+  async listAgeNorms(): Promise<AgeNorm[]> {
+    return this.db.query<AgeNorm>(
+      `SELECT from_weeks AS fromWeeks, to_weeks AS toWeeks, wake_min_low AS wakeMinLow, wake_min_high AS wakeMinHigh,
+        naps_low AS napsLow, naps_high AS napsHigh FROM age_norms ORDER BY from_weeks`,
+    )
   }
 
   async listActivityTypes(): Promise<ActivityType[]> {

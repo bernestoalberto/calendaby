@@ -1,5 +1,6 @@
 import { NIGHT_END_HOUR, NIGHT_START_HOUR, type NapForecast } from './analytics.js'
 import type { BabyEvent } from './events.js'
+import type { Tonight } from './outlook.js'
 import { diaperForecast, feedForecast, sleepForecast, type FeedForecast } from './predictions.js'
 import { formatMinutes, sleepSessions } from './summary.js'
 
@@ -15,7 +16,18 @@ export const NAP_DUE_ID = 102
 export const WAKE_SOON_ID = 103
 export const FEED_DUE_ID = 104
 export const DIAPER_CHECK_ID = 105
-export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID] as const
+export const BRIEFING_ID = 106
+export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID, BRIEFING_ID] as const
+
+/** The `features` row that switches each alert on or off. */
+export const ALERT_FEATURE: Record<number, string> = {
+  [NAP_SOON_ID]: 'alertWindDown',
+  [NAP_DUE_ID]: 'alertNapDue',
+  [WAKE_SOON_ID]: 'alertWake',
+  [FEED_DUE_ID]: 'alertFeed',
+  [DIAPER_CHECK_ID]: 'alertDiaper',
+  [BRIEFING_ID]: 'alertBriefing',
+}
 export const NAP_LEAD_MS = 15 * 60_000
 
 function clockText(ms: number): string {
@@ -73,7 +85,7 @@ export function napAlerts(baby: string, forecast: NapForecast | undefined, aslee
  * - Next predicted feed (with usual bottle amount or next nursing side)
  * - Next diaper check reminder
  */
-export function smartAlerts(baby: string, events: BabyEvent[], now: number): NapAlert[] {
+export function smartAlerts(baby: string, events: BabyEvent[], now: number, on: (feature: string) => boolean = () => true): NapAlert[] {
   const sessions = sleepSessions(events)
   const currentSleep = sessions.at(-1)
   const asleep = currentSleep !== undefined && currentSleep.end === undefined
@@ -109,5 +121,21 @@ export function smartAlerts(baby: string, events: BabyEvent[], now: number): Nap
     })
   }
 
-  return out
+  return out.filter((a) => on(ALERT_FEATURE[a.id]))
+}
+
+/** One note a day at `time` ("07:30"), with what recent nights looked like. */
+export function briefingAlert(baby: string, time: string, recent: Tonight | undefined, now: number): NapAlert {
+  const [h, m] = time.split(':').map(Number)
+  const today = new Date(now).setHours(h, m, 0, 0)
+  const at = today > now ? today : new Date(today).setDate(new Date(today).getDate() + 1)
+  const lately = recent
+    ? ` Lately: ${recent.nightFeeds === 0 ? 'no night feeds' : `about ${recent.nightFeeds} night feed${recent.nightFeeds === 1 ? '' : 's'}`}, longest stretch ~${formatMinutes(recent.longestStretchMin)}.`
+    : ''
+  return {
+    id: BRIEFING_ID,
+    at,
+    title: `${baby}: good morning`,
+    body: `Log the wake-up and Today will lay out the naps, feeds and bedtime ahead.${lately}`,
+  }
 }

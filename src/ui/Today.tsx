@@ -1,7 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
-import type { SmartInsight } from '../domain/predictions'
+import { rangeText, tonightText, type Outlook } from '../domain/outlook'
+import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import type { HandoffBrief } from '../agents/handoff'
@@ -42,7 +43,8 @@ interface Props {
   napsToday: number
   day: DaySummary
   forecast?: NapForecast
-  insights: SmartInsight[]
+  outlook: Outlook
+  checkup?: Checkup & { around: number }
   lastFeed?: BabyEvent
   lastDiaper?: BabyEvent
   lastMed?: BabyEvent
@@ -270,7 +272,7 @@ export function Today(p: Props) {
       </section>
       )}
 
-      {p.on('insights') && p.insights.length > 0 && <Insights {...p} />}
+      {p.on('insights') && <ComingUp {...p} />}
 
       {p.on('handoff') && (
       <section className="card tip" {...handoff}>
@@ -405,49 +407,60 @@ function NapCard(p: Props) {
   )
 }
 
-// Only the top insight shows; the rest wait behind a tap so the screen stays calm.
-function Insights(p: Props) {
-  const [open, setOpen] = useState(false)
+// Three items at most and advice behind a tap, so the screen stays calm.
+function ComingUp(p: Props) {
+  const [open, setOpen] = useState<string>()
   const sec = useSection('advice')
-  const shown = open ? p.insights : p.insights.slice(0, 1)
-  const hidden = p.insights.length - shown.length
+  const items = p.outlook.items.slice(0, 3)
+  const tonight = new Date(p.now).getHours() >= 16 ? p.outlook.tonight : undefined
+  const checkup = p.checkup
+  if (items.length === 0 && !tonight && !checkup) return null
   return (
     <section className="card insight" {...sec}>
       <div className="card-head">
         <h3>
-          <SparkIcon width={20} height={20} /> Advice
+          <SparkIcon width={20} height={20} /> Coming up
         </h3>
       </div>
       <div className="stack">
-        {shown.map((item) => (
-          <div key={item.id} className="insight-row">
-            <div className="card-head">
+        {items.map((item) => (
+          <button key={item.id} type="button" className="insight-row" aria-expanded={open === item.id} onClick={() => setOpen(open === item.id ? undefined : item.id)}>
+            <span className="card-head">
               <b>{item.title}</b>
-              <Badge tone={item.tone}>{item.kind}</Badge>
-            </div>
-            <p className="muted">{item.prediction}</p>
-            {open && <p>{item.advice}</p>}
-          </div>
+              <span className="range">{rangeText(item, clock)}</span>
+            </span>
+            <small className="muted">{item.note}</small>
+            {open === item.id && <p>{item.advice}</p>}
+          </button>
         ))}
-      </div>
-      <div className="tip-actions">
-        {(hidden > 0 || open) && (
-          <button type="button" className="link strong" onClick={() => setOpen(!open)}>
-            {open ? 'Show less' : `Show ${hidden} more`}
+        {checkup && (
+          <button type="button" className="insight-row" aria-expanded={open === 'checkup'} onClick={() => setOpen(open === 'checkup' ? undefined : 'checkup')}>
+            <span className="card-head">
+              <b>Checkup: {checkup.label}</b>
+              <span className="range">{new Date(checkup.around).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+            </span>
+            <small className="muted">{checkup.vaccines.length > 0 ? `Vaccines: ${checkup.vaccines.join(', ')}` : 'Well-baby visit, no vaccines due'}</small>
+            {open === 'checkup' && <p>US schedule (2025 CDC/AAP). Book ahead and confirm the plan with your pediatrician.</p>}
           </button>
         )}
-        {p.on('agent') && (
+        {tonight && (
+          <p className="tonight">
+            <MoonIcon width={16} height={16} /> Tonight: {tonightText(tonight, clock)}
+          </p>
+        )}
+      </div>
+      {items.some((i) => i.basis !== 'own') && <p className="fine">Typical ranges for age, not medical advice. Confirm with your pediatrician.</p>}
+      {p.on('agent') && (
+        <div className="tip-actions">
           <button
             type="button"
             className="link muted"
-            onClick={() =>
-              p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)
-            }
+            onClick={() => p.onAsk(`Predict the rest of ${p.baby}'s day and give me advice based on recent sleep, feeding, and diaper logs.`)}
           >
             Ask the coach
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   )
 }

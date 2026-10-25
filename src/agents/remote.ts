@@ -8,6 +8,7 @@ export const AgentRequest = z.object({
   prompt: z.string().min(1).max(2000),
   now: z.string().min(1), // ISO 8601 with the parent's UTC offset
   events: z.array(BabyEvent).max(500).optional(),
+  birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD from Profile
 })
 export type AgentRequest = z.infer<typeof AgentRequest>
 

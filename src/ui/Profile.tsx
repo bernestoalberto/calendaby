@@ -20,8 +20,9 @@ interface Props {
   onTheme: (t: Theme) => void
   persistent: boolean
   reminders: boolean
+  briefingTime: string
   notifAccess: NotificationAccess
-  onSetting: (key: 'baby' | 'birth' | 'caregiver', value: string) => void
+  onSetting: (key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) => void
   onUnit: (u: Unit) => void
   onToggleReminders: () => void
   onTestReminder: () => void
@@ -36,6 +37,8 @@ function reminderStatusLabel(reminders: boolean, access: NotificationAccess): st
 
 export function Profile(p: Readonly<Props>) {
   const age = p.birth ? babyAge(p.birth, p.now) : undefined
+  const alerts = p.features.filter((f) => f.group === 'Notifications')
+  const screens = p.features.filter((f) => f.group !== 'Notifications')
   return (
     <div className="stack">
       <div className="page-head">
@@ -89,7 +92,7 @@ export function Profile(p: Readonly<Props>) {
           </Badge>
         </div>
         <p className="muted">
-          Notifies you for {p.baby}'s predicted naps (15m wind-down &amp; due time), expected wake-ups, upcoming feeds, and diaper checks deduced from your logs.
+          A wind-down note before {p.baby}'s nap and one morning briefing. Add more below if you want them.
           {p.notifAccess === 'denied' ? ' Allow notifications in your device or browser settings to turn this on.' : ''}
         </p>
         <div className="card-foot">
@@ -107,6 +110,15 @@ export function Profile(p: Readonly<Props>) {
             </button>
           )}
         </div>
+        {p.reminders && (
+          <>
+            <FeatureGroup rows={alerts} onToggle={p.onToggleFeature} />
+            <label className="field">
+              <span className="field-label">Morning briefing at</span>
+              <input type="time" defaultValue={p.briefingTime} onChange={(e) => e.target.value && p.onSetting('briefingTime', e.target.value)} />
+            </label>
+          </>
+        )}
       </section>
 
       <section className="card">
@@ -114,21 +126,8 @@ export function Profile(p: Readonly<Props>) {
           <h3>Features</h3>
         </div>
         <p className="muted">Turn off anything you do not use. Your logs are kept either way.</p>
-        {[...new Set(p.features.map((f) => f.group))].map((group) => (
-          <fieldset key={group} className="feature-group">
-            <legend className="field-label">{group}</legend>
-            {p.features
-              .filter((f) => f.group === group)
-              .map((f) => (
-                <label key={f.id} className="feature-row">
-                  <span>
-                    <b>{f.label}</b>
-                    <small className="muted">{f.hint}</small>
-                  </span>
-                  <input type="checkbox" role="switch" checked={f.enabled} onChange={() => p.onToggleFeature(f.id, !f.enabled)} />
-                </label>
-              ))}
-          </fieldset>
+        {[...new Set(screens.map((f) => f.group))].map((group) => (
+          <FeatureGroup key={group} rows={screens.filter((f) => f.group === group)} onToggle={p.onToggleFeature} />
         ))}
       </section>
 
@@ -160,5 +159,22 @@ export function Profile(p: Readonly<Props>) {
         </p>
       </section>
     </div>
+  )
+}
+
+function FeatureGroup(p: { rows: FeatureRow[]; onToggle: (id: string, enabled: boolean) => void }) {
+  return (
+    <fieldset className="feature-group">
+      <legend className="field-label">{p.rows[0]?.group}</legend>
+      {p.rows.map((f) => (
+        <label key={f.id} className="feature-row">
+          <span>
+            <b>{f.label}</b>
+            <small className="muted">{f.hint}</small>
+          </span>
+          <input type="checkbox" role="switch" checked={f.enabled} onChange={() => p.onToggle(f.id, !f.enabled)} />
+        </label>
+      ))}
+    </fieldset>
   )
 }

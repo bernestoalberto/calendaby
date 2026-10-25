@@ -1479,6 +1479,32 @@ main {
   font-size: 14px;
 }
 
+button.insight-row {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.insight .range {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.insight .tonight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.insight .fine {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
