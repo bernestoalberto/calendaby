@@ -1,6 +1,7 @@
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import { BabyEvent } from '../src/domain/events.js'
+import { SettingChange } from '../src/domain/sharedSettings.js'
 import { HouseholdError, type SharedStore } from './household.js'
 
 export type Env = { Variables: { userId: string | null } }
@@ -103,5 +104,11 @@ export function mountSharing(app: Hono<Env>, provider: SharedProvider) {
     'pullChanges',
     z.strictObject({ since: z.number().int().nonnegative() }),
     async ({ store, householdId }, { since }) => ({ household: householdId, ...(await store.changesSince(householdId, since)) }),
+  )
+
+  route(
+    'syncSettings',
+    z.strictObject({ changes: z.array(SettingChange).max(10) }),
+    async ({ store, householdId }, { changes }) => ({ household: householdId, settings: await store.syncSettings(householdId, changes) }),
   )
 }

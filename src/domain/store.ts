@@ -4,6 +4,7 @@ import { BabyEvent, type DraftEvent } from './events'
 import { activityId, DEFAULT_ACTIVITY_TYPES, type ActivityType } from './activities'
 import { DEFAULT_AGE_NORMS, type AgeNorm } from './ageNorms'
 import { DEFAULT_FEATURES, type FeatureRow } from './features'
+import { isSharedKey, SHARED_KEYS, type SettingChange, type SharedSetting } from './sharedSettings'
 
 export interface EventStore {
   list(): BabyEvent[]
@@ -38,7 +39,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 7
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -116,6 +117,17 @@ const MIGRATIONS: Record<number, string[]> = {
       op TEXT NOT NULL CHECK (op IN ('put', 'delete'))
     )`,
     "INSERT OR IGNORE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at",
+  ],
+  // Bookkeeping for the settings the household shares (the values stay in `settings`). `version` goes up on every
+  // local edit; a setting is unsent while version > synced. `fill` means "offer this, never override the family".
+  7: [
+    `CREATE TABLE IF NOT EXISTS shared_setting (
+      key TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1,
+      synced INTEGER NOT NULL DEFAULT 0,
+      fill INTEGER NOT NULL DEFAULT 1
+    )`,
+    `INSERT OR IGNORE INTO shared_setting (key) SELECT key FROM settings WHERE key IN (${SHARED_KEYS.map(sqlText).join(', ')})`,
   ],
 }
 
@@ -293,10 +305,16 @@ export class SqliteEventStore implements EventStore {
     await this.setSetting('syncSeq', String(seq))
   }
 
+  /** The first household this phone ever meets: offer its unsent settings without overriding what the family already has. */
+  async offerSettings(): Promise<void> {
+    await this.db.exec('UPDATE shared_setting SET fill = 1 WHERE version > synced')
+  }
+
   /** A different household: forget the position and send everything on this phone there. */
   async resetSync(household: string): Promise<void> {
     await this.setSyncState(household, 0)
     await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
+    await this.db.exec('UPDATE shared_setting SET version = version + 1, fill = 1')
   }
 
   async listFeatures(): Promise<FeatureRow[]> {
@@ -339,9 +357,61 @@ export class SqliteEventStore implements EventStore {
   }
 
   async setSetting(key: string, value: string): Promise<void> {
-    await this.db.exec(
+    await this.putSetting(key, value)
+    if (isSharedKey(key)) {
+      // A deliberate edit wins over the family's value, so it is no longer "fill only".
+      await this.db.exec(
+        `INSERT INTO shared_setting (key, version, synced, fill) VALUES (?, 1, 0, 0)
+         ON CONFLICT(key) DO UPDATE SET version = version + 1, fill = 0`,
+        [key],
+      )
+    }
+  }
+
+  private putSetting(key: string, value: string): Promise<void> {
+    return this.db.exec(
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       [key, value],
     )
+  }
+
+  /** Shared settings with an edit not yet sent. */
+  async pendingSettings(): Promise<{ changes: SettingChange[]; sent: { key: string; version: number }[] }> {
+    const rows = await this.db.query<{ key: string; value: string; version: number; fill: number }>(
+      `SELECT s.key, v.value, s.version, s.fill FROM shared_setting s JOIN settings v ON v.key = s.key
+       WHERE s.version > s.synced ORDER BY s.key`,
+    )
+    return {
+      changes: rows.flatMap((r) => (isSharedKey(r.key) ? [{ key: r.key, value: r.value, onlyIfMissing: r.fill === 1 }] : [])),
+      sent: rows.map((r) => ({ key: r.key, version: r.version })),
+    }
+  }
+
+  /** A setting edited again while it was being sent keeps its newer version, so it goes up next time. */
+  async markSettingsSynced(sent: { key: string; version: number }[]): Promise<void> {
+    for (const { key, version } of sent) {
+      await this.db.exec('UPDATE shared_setting SET synced = ? WHERE key = ? AND version = ?', [version, key, version])
+    }
+  }
+
+  /** Takes the household's values, except for a setting with an unsent edit. True when anything on screen changes. */
+  async applyRemoteSettings(settings: SharedSetting[]): Promise<boolean> {
+    let changed = false
+    for (const { key, value } of settings) {
+      const [row] = await this.db.query<{ dirty: number }>('SELECT version > synced AS dirty FROM shared_setting WHERE key = ?', [key])
+      if (row?.dirty === 1) continue
+      if ((await this.getSetting(key)) === value) {
+        await this.db.exec('INSERT OR IGNORE INTO shared_setting (key, version, synced, fill) VALUES (?, 0, 0, 0)', [key])
+        continue
+      }
+      await this.putSetting(key, value)
+      await this.db.exec(
+        `INSERT INTO shared_setting (key, version, synced, fill) VALUES (?, 0, 0, 0)
+         ON CONFLICT(key) DO UPDATE SET fill = 0`,
+        [key],
+      )
+      changed = true
+    }
+    return changed
   }
 }

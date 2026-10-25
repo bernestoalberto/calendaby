@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
@@ -26,23 +26,27 @@ import {
   type NotificationAccess,
 } from './notifications'
 import { useAccount } from './ui/accountContext'
-import { Activity } from './ui/Activity'
-import { Analytics } from './ui/Analytics'
-import { Agent, type Chat } from './ui/Agent'
-import { Calendar } from './ui/Calendar'
+import type { Chat } from './ui/Agent'
 import { Sheet } from './ui/controls'
 import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
-import { Logger, type LogTab } from './ui/Logger'
-import { Profile } from './ui/Profile'
+import type { LogTab } from './ui/Logger'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
-import { Timeline } from './ui/Timeline'
 import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { useSpeech } from './useSpeech'
 import './App.css'
+
+// Today loads with the app; the other screens load the first time they are opened, so the first paint stays small.
+const Activity = lazy(() => import('./ui/Activity').then((m) => ({ default: m.Activity })))
+const Analytics = lazy(() => import('./ui/Analytics').then((m) => ({ default: m.Analytics })))
+const Agent = lazy(() => import('./ui/Agent').then((m) => ({ default: m.Agent })))
+const Calendar = lazy(() => import('./ui/Calendar').then((m) => ({ default: m.Calendar })))
+const Logger = lazy(() => import('./ui/Logger').then((m) => ({ default: m.Logger })))
+const Profile = lazy(() => import('./ui/Profile').then((m) => ({ default: m.Profile })))
+const Timeline = lazy(() => import('./ui/Timeline').then((m) => ({ default: m.Timeline })))
 
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
@@ -99,7 +103,16 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
   const [calBusy, setCalBusy] = useState(false)
   const [calError, setCalError] = useState<string>()
-  const sync = useSync(store, account.signedIn === true, reload)
+  /** The settings the whole family shares; another caregiver may have changed them. */
+  const loadShared = useCallback(async () => {
+    const [name, born, goal] = await Promise.all([store.getSetting('baby'), store.getSetting('birth'), store.getSetting('tummyGoal')])
+    if (name) setBaby(name)
+    setBirth(born ?? '')
+    const minutes = Number(goal)
+    if (goal && Number.isFinite(minutes) && minutes >= 0) setTummyGoal(minutes)
+  }, [store])
+
+  const sync = useSync(store, account.signedIn === true, onSynced)
   const speech = useSpeech(
     (heard) => setText((t) => (t ? `${t}, ${heard}` : heard)),
     (message) => setToast({ text: message }),
@@ -119,16 +132,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         void store.setSetting('caregiver', account.name)
       }
     })
-    void store.getSetting('baby').then((v) => v && setBaby(v))
-    void store.getSetting('birth').then((v) => v && setBirth(v))
+    void loadShared()
     void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.listFeatures().then(setFeatureRows)
     void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
-    void store.getSetting('tummyGoal').then((v) => {
-      const n = Number(v)
-      if (v && Number.isFinite(n) && n >= 0) setTummyGoal(n)
-    })
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('briefingTime').then((v) => v && setBriefingTime(v))
     void store.listAgeNorms().then(setAgeNorms)
@@ -138,7 +146,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     })
     void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
     void notificationAccess().then(setNotifAccess)
-  }, [store, account.name])
+  }, [store, account.name, loadShared])
 
   useEffect(() => applyTheme(document.documentElement, theme), [theme])
 
@@ -225,6 +233,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   function reload() {
     setEvents(store.list())
     setNow(nowMs())
+  }
+
+  function onSynced() {
+    reload()
+    void loadShared()
   }
 
   // Every local change goes up shortly after it is saved.
@@ -367,7 +380,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     if (key === 'birth') setBirth(value)
     if (key === 'caregiver') setCaregiver(value)
     if (key === 'briefingTime') setBriefingTime(value)
-    void store.setSetting(key, value)
+    void store.setSetting(key, value).then(() => (key === 'baby' || key === 'birth') && sync.soon())
   }
 
   function changeTheme(next: Theme) {
@@ -422,7 +435,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
 
   function changeTummyGoal(minutes: number) {
     setTummyGoal(minutes)
-    void store.setSetting('tummyGoal', String(minutes))
+    void store.setSetting('tummyGoal', String(minutes)).then(sync.soon)
   }
 
   function openLog(t: LogTab) {
@@ -466,6 +479,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       {!store.persistent && <p className="warning">Not saved: entries are kept only when the app is opened over https or localhost.</p>}
 
       <main>
+        <Suspense fallback={<p className="muted">Loading…</p>}>
         {tab === 'today' && (
           <Today
             on={on}
@@ -575,6 +589,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onHandoff={() => setSheet('handoff')}
           />
         )}
+        </Suspense>
       </main>
 
       <nav className="nav" aria-label="Main" {...sectionProps(theme, 'nav')}>

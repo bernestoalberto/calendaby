@@ -145,4 +145,41 @@ describe('two phones, two accounts, one household', () => {
     await syncOnce(dad, callAs('tok_dad'))
     expect(dad.list()).toHaveLength(30)
   })
+
+  it('shares the baby name, birth date and tummy goal, and takes the family values on joining', async () => {
+    const mom = await phone()
+    const dad = await phone()
+    await mom.setSetting('baby', 'Lily')
+    await mom.setSetting('birth', '2026-06-20')
+    await dad.setSetting('baby', 'Baby')
+    await dad.setSetting('unit', 'ml')
+    await syncOnce(mom, callAs('tok_mom'))
+
+    await join(callAs('tok_mom'), callAs('tok_dad'), 'Dad')
+    const first = await syncOnce(dad, callAs('tok_dad'))
+    expect(first.settingsChanged).toBe(true)
+    expect(await dad.getSetting('baby')).toBe('Lily')
+    expect(await dad.getSetting('birth')).toBe('2026-06-20')
+    expect(await dad.getSetting('unit')).toBe('ml')
+
+    await dad.setSetting('tummyGoal', '45')
+    await syncOnce(dad, callAs('tok_dad'))
+    const second = await syncOnce(mom, callAs('tok_mom'))
+    expect(second.settingsChanged).toBe(true)
+    expect(await mom.getSetting('tummyGoal')).toBe('45')
+    expect(await mom.getSetting('unit')).toBeUndefined()
+    expect((await syncOnce(mom, callAs('tok_mom'))).settingsChanged).toBe(false)
+  })
+
+  it('gives a new household the values from the phone that creates it', async () => {
+    const mom = await phone()
+    await mom.setSetting('baby', 'Lily')
+    await syncOnce(mom, callAs('tok_mom'))
+    const dad = await phone()
+    await dad.setSetting('baby', 'Max')
+    await syncOnce(dad, callAs('tok_dad'))
+    expect(await dad.getSetting('baby')).toBe('Max')
+    expect(await mom.getSetting('baby')).toBe('Lily')
+  })
 })
+

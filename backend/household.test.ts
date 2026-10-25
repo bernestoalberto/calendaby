@@ -187,3 +187,37 @@ describe('households and invites', () => {
     expect(await store.householdOf('user_b')).toBe(A)
   })
 })
+
+describe('shared settings', () => {
+  const set = (key: 'baby' | 'birth' | 'tummyGoal', value: string, onlyIfMissing = false) => ({ key, value, onlyIfMissing })
+
+  it('starts empty and keeps each household separate', async () => {
+    expect(await store.syncSettings(A, [])).toEqual([])
+    await store.syncSettings(A, [set('baby', 'Lily')])
+    await store.syncSettings(B, [set('baby', 'Max')])
+    expect(await store.syncSettings(A, [])).toEqual([{ key: 'baby', value: 'Lily' }])
+    expect(await store.syncSettings(B, [])).toEqual([{ key: 'baby', value: 'Max' }])
+  })
+
+  it('lets the later write win', async () => {
+    await store.syncSettings(A, [set('tummyGoal', '30')])
+    expect(await store.syncSettings(A, [set('tummyGoal', '45')])).toEqual([{ key: 'tummyGoal', value: '45' }])
+  })
+
+  it('lets a phone that just joined fill gaps without overriding the family', async () => {
+    await store.syncSettings(A, [set('baby', 'Lily')])
+    const result = await store.syncSettings(A, [set('baby', 'Other', true), set('birth', '2026-06-20', true)])
+    expect(result).toEqual([
+      { key: 'baby', value: 'Lily' },
+      { key: 'birth', value: '2026-06-20' },
+    ])
+  })
+
+  it('refuses values that are not valid for the setting', async () => {
+    await expect(store.syncSettings(A, [set('birth', 'yesterday')])).rejects.toThrow()
+    await expect(store.syncSettings(A, [set('tummyGoal', '-5')])).rejects.toThrow()
+    await expect(store.syncSettings(A, [set('baby', '   ')])).rejects.toThrow()
+    expect(await store.syncSettings(A, [])).toEqual([])
+  })
+})
+

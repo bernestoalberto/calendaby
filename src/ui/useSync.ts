@@ -28,7 +28,7 @@ export function useSync(store: SqliteEventStore, enabled: boolean, onChanged: ()
     setStatus((s) => ({ ...s, state: 'syncing' }))
     try {
       const result = await syncOnce(store, (op, body) => callBackend(op, body))
-      if (result.pulled > 0) onChanged()
+      if (result.pulled > 0 || result.settingsChanged) onChanged()
       setStatus({ state: 'idle', lastAt: Date.now() })
     } catch (err) {
       // Offline is normal for a phone; keep what was last known and say so, the next trigger retries.

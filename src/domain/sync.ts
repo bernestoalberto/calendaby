@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { BabyEvent } from './events'
+import { SharedSetting } from './sharedSettings'
 import type { SqliteEventStore } from './store'
 
 // Everything from the server is checked before it touches the phone's database.
@@ -11,12 +12,16 @@ const PullResponse = z.object({
   more: z.boolean(),
 })
 
+const SettingsResponse = z.object({ household: z.string().min(1), settings: z.array(SharedSetting) })
+
 /** One backend call by operation id; throws when the server says no. */
 export type Call = (operationId: string, body: unknown) => Promise<unknown>
 
 export interface SyncResult {
   pushed: number
   pulled: number
+  /** The family changed the baby's name, birth date or goal: the screen needs to read them again. */
+  settingsChanged: boolean
 }
 
 const BATCH = 200
@@ -36,6 +41,7 @@ async function adopt(store: SqliteEventStore, state: State, answered: string): P
   if (state.household === undefined) {
     state.household = answered
     await store.setSyncState(answered, state.seq)
+    await store.offerSettings()
     return
   }
   await store.resetSync(answered)
@@ -43,7 +49,7 @@ async function adopt(store: SqliteEventStore, state: State, answered: string): P
 }
 
 async function run(store: SqliteEventStore, call: Call): Promise<SyncResult> {
-  const result: SyncResult = { pushed: 0, pulled: 0 }
+  const result: SyncResult = { pushed: 0, pulled: 0, settingsChanged: false }
   const state = await store.syncState()
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -63,6 +69,12 @@ async function run(store: SqliteEventStore, call: Call): Promise<SyncResult> {
     await store.setSyncState(res.household, state.seq)
     if (!res.more) break
   }
+
+  const outgoing = await store.pendingSettings()
+  const settings = SettingsResponse.parse(await call('syncSettings', { changes: outgoing.changes }))
+  await adopt(store, state, settings.household)
+  await store.markSettingsSynced(outgoing.sent)
+  result.settingsChanged = await store.applyRemoteSettings(settings.settings)
   return result
 }
 

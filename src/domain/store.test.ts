@@ -219,3 +219,59 @@ describe('sync outbox', () => {
   })
 })
 
+describe('shared settings on the phone', () => {
+  it('queues a change to a shared setting but not to a private one', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('unit', 'ml')
+    await store.setSetting('baby', 'Lily')
+    const { changes } = await store.pendingSettings()
+    expect(changes).toEqual([{ key: 'baby', value: 'Lily', onlyIfMissing: false }])
+  })
+
+  it('keeps a change that was made again while the first was being sent', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('tummyGoal', '30')
+    const first = await store.pendingSettings()
+    await store.setSetting('tummyGoal', '45')
+    await store.markSettingsSynced(first.sent)
+    expect((await store.pendingSettings()).changes).toEqual([{ key: 'tummyGoal', value: '45', onlyIfMissing: false }])
+  })
+
+  it('takes the family values, but not over a change that has not been sent', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('baby', 'Mine')
+    await store.setSetting('birth', '2026-01-01')
+    await store.markSettingsSynced((await store.pendingSettings()).sent)
+    const changed = await store.applyRemoteSettings([{ key: 'baby', value: 'Lily' }, { key: 'birth', value: '2026-06-20' }])
+    expect(changed).toBe(true)
+    expect(await store.getSetting('baby')).toBe('Lily')
+    await store.setSetting('baby', 'Edited')
+    expect(await store.applyRemoteSettings([{ key: 'baby', value: 'Lily' }])).toBe(false)
+    expect(await store.getSetting('baby')).toBe('Edited')
+    expect((await store.pendingSettings()).changes).toEqual([{ key: 'baby', value: 'Edited', onlyIfMissing: false }])
+  })
+
+  it('does not report a change when the value is already the same', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.applyRemoteSettings([{ key: 'baby', value: 'Lily' }])
+    expect(await store.applyRemoteSettings([{ key: 'baby', value: 'Lily' }])).toBe(false)
+    expect((await store.pendingSettings()).changes).toEqual([])
+  })
+
+  it('offers its values to a new household without overriding it', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('baby', 'Mine')
+    await store.markSettingsSynced((await store.pendingSettings()).sent)
+    await store.resetSync('h2')
+    expect((await store.pendingSettings()).changes).toEqual([{ key: 'baby', value: 'Mine', onlyIfMissing: true }])
+  })
+
+  it('queues settings that were on the phone before sharing existed', async () => {
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver)
+    driver.db.exec("DROP TABLE shared_setting; PRAGMA user_version = 6; INSERT INTO settings (key, value) VALUES ('baby', 'Old')")
+    const store = await SqliteEventStore.open(driver)
+    expect((await store.pendingSettings()).changes).toEqual([{ key: 'baby', value: 'Old', onlyIfMissing: true }])
+  })
+})
+

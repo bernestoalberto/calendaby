@@ -1,6 +1,7 @@
 import { createHash, randomInt } from 'node:crypto'
 import { createClient, type Client } from '@libsql/client'
 import { BabyEvent } from '../src/domain/events.js'
+import { SettingChange, type SharedSetting } from '../src/domain/sharedSettings.js'
 
 /**
  * Storage that keeps a household's data in step across its caregivers' phones (docs/PLAN_SHARING.md). Each caregiver
@@ -53,6 +54,11 @@ export interface SharedStore {
   /** Marks an event deleted but keeps it so other phones learn about it. False when there was nothing to delete. */
   deleteEvent(householdId: string, id: string): Promise<boolean>
   /**
+   * Applies a phone's setting updates (the later write wins, except `onlyIfMissing`, which never replaces a value)
+   * and returns every shared setting the household has.
+   */
+  syncSettings(householdId: string, changes: SettingChange[]): Promise<SharedSetting[]>
+  /**
    * Changes after `since` (0 for everything), oldest first, with the number to ask from next time. At most `limit` come
    * back; `more` says to ask again from `seq`.
    */
@@ -100,6 +106,15 @@ const MIGRATIONS: string[][] = [
       PRIMARY KEY (household_id, id)
     )`,
     'CREATE INDEX event_by_seq ON event (household_id, seq)',
+  ],
+  [
+    `CREATE TABLE household_setting (
+      household_id TEXT NOT NULL REFERENCES household(id),
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (household_id, key)
+    )`,
   ],
 ]
 
@@ -286,6 +301,25 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
         'write',
       )
       return changed.rowsAffected > 0
+    },
+
+    async syncSettings(householdId, changes) {
+      const valid = changes.map((c) => SettingChange.parse(c))
+      const at = now()
+      if (valid.length > 0) {
+        await db.batch(
+          valid.map((c) => ({
+            sql: c.onlyIfMissing
+              ? 'INSERT OR IGNORE INTO household_setting (household_id, key, value, updated_at) VALUES (?, ?, ?, ?)'
+              : `INSERT INTO household_setting (household_id, key, value, updated_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (household_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+            args: [householdId, c.key, c.value, at],
+          })),
+          'write',
+        )
+      }
+      const { rows } = await db.execute({ sql: 'SELECT key, value FROM household_setting WHERE household_id = ? ORDER BY key', args: [householdId] })
+      return rows.map((r) => ({ key: String(r.key) as SharedSetting['key'], value: String(r.value) }))
     },
 
     async changesSince(householdId, since, limit = 500) {
