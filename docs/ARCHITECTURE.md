@@ -9,7 +9,8 @@
 | Rules parser (`src/agents/capture.ts`) | Turns "fed 120 ml at 3" into events on the phone, offline. Leftover clauses are sent to the agent. |
 | Local database (`src/db/`) | SQLite on the device. Web: SQLite WASM on the origin private file system in a worker, coordinated with a Web Lock so open tabs share it. Native: the Capacitor SQLite plugin. |
 | Backend (`backend/`) | Hono routes on SQLite (`node:sqlite`). One POST route per operationId: `recordEvents`, `listEvents`. Every input is required and strict, every operation has a one-line description. |
-| Agent (`agent/agent.ts`) | `capture` and `chat` modes using the AI SDK tool loop. Tools: `record_events`, `ask_parent`, and `listEvents` from the backend. |
+| Agent (`agent/agent.ts`) | `capture` and `chat` modes using the AI SDK tool loop. Capture tools: `record_events`, `ask_parent`. Chat tools: `listEvents` (backend), `getPredictions`, `getOutlook` (expected next nap, wake, feed and bedtime as ranges, with their basis), `pediatric_guide`, and the Google tools. |
+| Knowledge (`src/knowledge/`) | Vetted pediatric guidance (CDC, NIH, WHO, MedlinePlus) with citations, filtered by the baby age from `birth`. `screen()` flags red-flag and dosing questions so the prompt leads with the safe advice. The agent never gives doses or diagnoses. |
 | Functions (`api/`) | `/api/agent` validates the request, runs the agent and validates the reply. `/api/backend/*` serves the backend routes. |
 
 ## Data flow

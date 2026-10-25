@@ -11,8 +11,12 @@ import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
 import { outlook } from './domain/outlook'
+<<<<<<< HEAD
 import { normFor, type AgeNorm } from './domain/ageNorms'
 import { nextCheckups, weeksOld } from './knowledge/index'
+=======
+import { ageInWeeks, normFor, type AgeNorm } from './domain/ageNorms'
+>>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
 import { feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
@@ -151,8 +155,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const day = useMemo(() => summarizeDay(events, new Date(now)), [events, now])
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
+<<<<<<< HEAD
   const weeks = weeksOld(birth, now)
   const checkup = weeks === undefined ? undefined : nextCheckups(weeks, 'us', 1)[0]
+=======
+  const weeks = birth ? ageInWeeks(birth, now) : undefined
+>>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
   const view = useMemo(() => outlook(events, normFor(ageNorms, weeks), weeks, now), [events, ageNorms, weeks, now])
   const agenda = useMemo(
     () => buildAgenda(appointments, calEvents, sleepForecast(events, now), feedForecast(events, now), now),
@@ -471,7 +479,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             day={day}
             forecast={forecast}
             outlook={view}
+<<<<<<< HEAD
             checkup={checkup && { ...checkup, around: new Date(`${birth}T00:00`).getTime() + checkup.at * 7 * 86_400_000 }}
+=======
+>>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
             lastMed={lastOf('med')}

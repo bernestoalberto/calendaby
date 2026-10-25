@@ -28,6 +28,7 @@ test('Today shows what is coming up and tonight', async ({ page }) => {
   await expect(card.getByText('Bedtime')).toBeVisible()
   await expect(card.getByText(/Tonight: bed 7:30 PM, about 1 night feed/)).toBeVisible()
 })
+<<<<<<< HEAD
 
 test('Today lists the next checkup once a birth date is set', async ({ page }) => {
   await page.clock.setFixedTime(new Date(2026, 9, 24, 10, 0))
@@ -37,3 +38,5 @@ test('Today lists the next checkup once a birth date is set', async ({ page }) =
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Today' }).click()
   await expect(page.locator('section.insight').getByText('Checkup: 4 months')).toBeVisible()
 })
+=======
+>>>>>>> fc9c5a4 (Add pediatric knowledge layer to the agent: advice cites CDC, NIH and WHO instead of the model's memory 2)
