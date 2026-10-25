@@ -1,17 +1,6 @@
+import { parseSwatch } from '../domain/options'
 import { DEFAULT_THEME, SECTIONS, type Look, type SectionId, type SectionStyle, type Shape, type Theme } from '../domain/theme'
 import { Segmented } from './controls'
-
-// Starting points only; the colour picker next to them takes any colour.
-const SWATCHES = [
-  { name: 'Lavender', hex: '#673ab7' },
-  { name: 'Ocean', hex: '#1e6fd9' },
-  { name: 'Teal', hex: '#00897b' },
-  { name: 'Meadow', hex: '#43a047' },
-  { name: 'Sunshine', hex: '#e59a00' },
-  { name: 'Coral', hex: '#e5533d' },
-  { name: 'Rose', hex: '#d81b60' },
-  { name: 'Slate', hex: '#546e7a' },
-]
 
 const SHAPE_OPTIONS = [
   { value: 'sharp', label: 'Sharp' },
@@ -28,6 +17,8 @@ const LOOK_OPTIONS = [
 
 interface Props {
   theme: Theme
+  /** Name|#colour rows from the database. */
+  swatches: string[]
   onTheme: (t: Theme) => void
 }
 
@@ -40,7 +31,10 @@ function Row(props: { label: string; children: React.ReactNode }) {
   )
 }
 
-export function Appearance({ theme, onTheme }: Readonly<Props>) {
+export function Appearance({ theme, swatches, onTheme }: Readonly<Props>) {
+  const palette = swatches.map(parseSwatch)
+  // The picker needs some colour to start from: the first swatch, else a neutral grey.
+  const pickerStart = theme.accent ?? palette[0]?.hex ?? '#808080'
   const set = <K extends keyof Theme>(key: K, value: Theme[K]) => onTheme({ ...theme, [key]: value })
 
   function setSection(id: SectionId, patch: Partial<SectionStyle>) {
@@ -78,7 +72,7 @@ export function Appearance({ theme, onTheme }: Readonly<Props>) {
 
         <Row label="Main colour">
           <div className="swatches">
-            {SWATCHES.map((s) => (
+            {palette.map((s) => (
               <button
                 key={s.hex}
                 type="button"
@@ -93,7 +87,7 @@ export function Appearance({ theme, onTheme }: Readonly<Props>) {
               type="color"
               className="swatch picker"
               aria-label="Pick any colour"
-              value={theme.accent ?? '#673ab7'}
+              value={pickerStart}
               onChange={(e) => set('accent', e.target.value)}
             />
             {theme.accent && (
@@ -175,7 +169,7 @@ export function Appearance({ theme, onTheme }: Readonly<Props>) {
                     type="color"
                     className="swatch picker"
                     aria-label={`${s.label} colour`}
-                    value={own?.color ?? theme.accent ?? '#673ab7'}
+                    value={own?.color ?? pickerStart}
                     onChange={(e) => setSection(s.id, { color: e.target.value })}
                   />
                   {own?.color && (

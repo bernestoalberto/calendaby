@@ -30,13 +30,13 @@ import { useSection } from './themeContext'
 
 export type QuickKind = 'feed' | 'diaper' | 'med' | 'note'
 
-const SLEEP_GOAL_MIN = 14 * 60
-
 interface Props {
   on: (feature: string) => boolean
   baby: string
   now: number
   unit: Unit
+  /** The daily sleep goal in hours; the parent sets it. */
+  sleepGoalHours: number
   current?: SleepSession
   asleep: boolean
   lastDone?: SleepSession
@@ -61,6 +61,7 @@ interface Props {
 }
 
 export function Today(p: Props) {
+  const sleepGoalMin = p.sleepGoalHours * 60
   const awakeFor = p.lastDone?.end !== undefined ? p.now - p.lastDone.end : undefined
   const status = useSection('status')
   const quick = useSection('quick')
@@ -220,11 +221,11 @@ export function Today(p: Props) {
             <MoonIcon width={18} height={18} /> Sleep
           </span>
           <span>
-            <b>{formatMinutes(p.day.sleepMinutes)}</b> / {SLEEP_GOAL_MIN / 60}h goal
+            <b>{formatMinutes(p.day.sleepMinutes)}</b> / {p.sleepGoalHours}h goal
           </span>
         </div>
-        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={SLEEP_GOAL_MIN} aria-valuenow={p.day.sleepMinutes}>
-          <span style={{ width: `${Math.min(100, (p.day.sleepMinutes / SLEEP_GOAL_MIN) * 100)}%` }} />
+        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={sleepGoalMin} aria-valuenow={p.day.sleepMinutes}>
+          <span style={{ width: `${Math.min(100, (p.day.sleepMinutes / sleepGoalMin) * 100)}%` }} />
         </div>
         <div className="mini-tiles">
           <div>

@@ -1,3 +1,4 @@
+import type { ListId } from '../domain/options'
 import { useState } from 'react'
 import type { ActivityType } from '../domain/activities'
 import type { DraftEvent } from '../domain/events'
@@ -30,11 +31,6 @@ const nowMs = () => Date.now()
 
 export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump'
 
-const FEED_TAGS = ['Fussy', 'Spit-up', 'Gassy', 'Burped', 'Hiccups']
-const DIAPER_TAGS = ['Normal', 'Rash', 'Barrier cream', 'Blowout']
-const MEDS = ['Vitamin D', 'Tylenol', 'Ibuprofen', 'Gripe water', 'Gas drops']
-const PRESETS = { oz: [2, 4, 5, 6, 8], ml: [60, 90, 120, 150, 180] }
-const DURATIONS = [3, 5, 10, 15, 30]
 const STEP = { oz: 0.5, ml: 10 }
 const MAX = { oz: 12, ml: 360 }
 
@@ -43,6 +39,8 @@ interface Props {
   now: number
   unit: Unit
   activityTypes: ActivityType[]
+  /** The editable lists (tags, medicines, preset amounts and durations), read from the database. */
+  lists: Record<ListId, string[]>
   on: (feature: string) => boolean
   onAddActivityType: (label: string) => Promise<ActivityType | undefined>
   tab: LogTab
@@ -78,7 +76,9 @@ export function Logger(p: Props) {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [contents, setContents] = useState<'wet' | 'dirty' | 'both' | null>(null)
-  const [med, setMed] = useState(MEDS[0])
+  const presets = (p.unit === 'oz' ? p.lists.amountsOz : p.lists.amountsMl).map(Number)
+  const middle = presets[Math.floor(presets.length / 2)] ?? STEP[p.unit]
+  const [med, setMed] = useState(p.lists.meds[0] ?? '')
   const [dose, setDose] = useState('')
   const [activity, setActivity] = useState(p.activityTypes[0]?.id ?? '')
   const [minutes, setMinutes] = useState('')
@@ -250,7 +250,7 @@ export function Logger(p: Props) {
               />
             </div>
             <div className="stepper">
-              <button type="button" aria-label="Less" onClick={() => setAmount((a) => Math.max(0, (a ?? PRESETS[p.unit][2]) - STEP[p.unit]))}>
+              <button type="button" aria-label="Less" onClick={() => setAmount((a) => Math.max(0, (a ?? middle) - STEP[p.unit]))}>
                 <MinusIcon />
               </button>
               <div>
@@ -270,12 +270,12 @@ export function Logger(p: Props) {
                       : `~${(amount / OZ).toFixed(1)} oz`}
                 </button>
               </div>
-              <button type="button" aria-label="More" onClick={() => setAmount((a) => Math.min(MAX[p.unit], (a ?? PRESETS[p.unit][2]) + STEP[p.unit]))}>
+              <button type="button" aria-label="More" onClick={() => setAmount((a) => Math.min(MAX[p.unit], (a ?? middle) + STEP[p.unit]))}>
                 <PlusIcon />
               </button>
             </div>
             <div className="presets">
-              {PRESETS[p.unit].map((v) => (
+              {presets.map((v) => (
                 <button key={v} type="button" aria-pressed={amount === v} onClick={() => setAmount(v)}>
                   {v}
                   {p.unit === 'oz' ? 'oz' : ''}
@@ -284,7 +284,7 @@ export function Logger(p: Props) {
             </div>
           </section>
 
-          <TagsCard title="Symptoms & Tags" options={FEED_TAGS} tags={tags} onTags={setTags} note={note} onNote={setNote} placeholder={`e.g. ${p.baby} burped twice, drifted off quickly…`} />
+          <TagsCard title="Symptoms & Tags" options={p.lists.feedTags} tags={tags} onTags={setTags} note={note} onNote={setNote} placeholder={`e.g. ${p.baby} burped twice, drifted off quickly…`} />
         </>
       )}
 
@@ -345,7 +345,7 @@ export function Logger(p: Props) {
               ))}
             </div>
           </section>
-          <TagsCard title="Details" options={DIAPER_TAGS} tags={tags} onTags={setTags} note={note} onNote={setNote} placeholder="e.g. Mild redness, applied cream" />
+          <TagsCard title="Details" options={p.lists.diaperTags} tags={tags} onTags={setTags} note={note} onNote={setNote} placeholder="e.g. Mild redness, applied cream" />
         </>
       )}
 
@@ -360,7 +360,7 @@ export function Logger(p: Props) {
             </h3>
           </div>
           <div className="chips">
-            {MEDS.map((m) => (
+            {p.lists.meds.map((m) => (
               <button key={m} type="button" aria-pressed={med === m} className={med === m ? 'chip on' : 'chip'} onClick={() => setMed(m)}>
                 {m}
               </button>
@@ -399,7 +399,7 @@ export function Logger(p: Props) {
             ))}
           </div>
           <div className="presets">
-            {DURATIONS.map((m) => (
+            {p.lists.durations.map(Number).map((m) => (
               <button key={m} type="button" aria-pressed={minutes === String(m)} onClick={() => setMinutes(String(m))}>
                 {m}m
               </button>

@@ -46,6 +46,15 @@ Each caregiver signs in with their own Google account through Clerk. A **househo
 - Shared: events, baby name, birth date and tummy goal. Per phone: theme, feature switches, units, reminders, display name.
 - The assistant reads the household's events from the database, so every caregiver gets answers from the same history.
 
+## Seeds (starting data)
+
+Starting data is not scattered through the code. `src/domain/seeds.ts` holds a list of seeds (features, activity types, age norms, the quick-pick lists, default settings). On open, each phone plants the seeds it has not had yet and records them in `seed_applied`.
+
+- Every seed statement is `INSERT OR IGNORE`: a stored choice is never overwritten, and an item a parent removed does not come back.
+- **To add or change a default for everyone,** add a new seed with a new id containing only the new rows. Do not edit a seed that has shipped. Schema changes stay in `MIGRATIONS`; data does not.
+- A phone that already ran the old migrations that used to plant a seed has it marked done (`since`), so nothing is planted twice.
+- Code reads these through the database (`store.setting()`, `store.options()`, `listFeatures()`), never from the constants.
+
 ## Models
 
 OpenRouter only. `MODEL_NAME` picks the model (default `openai/gpt-6-luna`, low reasoning effort). The key comes from the `OPEN_ROUTER_API` environment variable or `.env.local`. Without the key `/api/agent` returns 503 and the app shows the assistant as offline; logging still works.
@@ -90,3 +99,4 @@ Import the repo, set `OPEN_ROUTER_API`, optionally `MODEL_NAME`, and `AGENT_ALLO
 - Added the Agent screen, general baby questions, Husky pre-commit and Playwright tests.
 - Fixed the Agent screen crash (scroll effect) and the two-tab database clash.
 - Added shared household storage (`backend/household.ts`): households, members, invite codes, scoped, numbered, tombstoned events. Not wired to the app yet.
+- Added the seeding mechanism (`seeds.ts`, `seed_applied`, schema v9): starting data is planted once per phone and new defaults reach existing phones as new seeds.

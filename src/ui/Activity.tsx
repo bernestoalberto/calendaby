@@ -7,7 +7,6 @@ import { Badge } from './controls'
 import { FaceIcon, PencilIcon } from './icons'
 import { clock } from './kinds'
 
-const QUICK_MINUTES = [3, 5, 10]
 const RECENT = 8
 
 interface Props {
@@ -15,6 +14,8 @@ interface Props {
   events: BabyEvent[]
   now: number
   types: ActivityType[]
+  /** One-tap lengths, from the database. */
+  quickMinutes: number[]
   /** Daily tummy time goal in minutes; chosen by the parent, not medical advice. */
   goalMin: number
   onGoal: (minutes: number) => void
@@ -22,7 +23,7 @@ interface Props {
   onEdit: (events: BabyEvent[]) => void
 }
 
-export function Activity({ baby, events, now, types, goalMin, onGoal, onLog, onEdit }: Readonly<Props>) {
+export function Activity({ baby, events, now, types, quickMinutes, goalMin, onGoal, onLog, onEdit }: Readonly<Props>) {
   const days = useMemo(() => activityDays(events, 7, now), [events, now])
   const today = days[days.length - 1]
   const tummy = today.byType.tummy ?? 0
@@ -75,7 +76,7 @@ export function Activity({ baby, events, now, types, goalMin, onGoal, onLog, onE
           <div key={t.id} className="row-field">
             <span>{t.label}</span>
             <span className="chips">
-              {QUICK_MINUTES.map((m) => (
+              {quickMinutes.map((m) => (
                 <button key={m} type="button" className="chip" aria-label={`${t.label} ${m} minutes`} onClick={() => onLog({ kind: 'activity', at: Date.now(), type: t.id, durationMin: m })}>
                   {m}m
                 </button>

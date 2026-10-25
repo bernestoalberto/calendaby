@@ -7,6 +7,7 @@ import { Appointment as AppointmentSchema, type Appointment } from './domain/app
 import { buildAgenda, type CalendarEvent } from './domain/calendar'
 import { napForecast } from './domain/analytics'
 import type { ActivityType } from './domain/activities'
+import { DEFAULT_SETTINGS, type ListId } from './domain/options'
 import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
@@ -48,6 +49,12 @@ const Logger = lazy(() => import('./ui/Logger').then((m) => ({ default: m.Logger
 const Profile = lazy(() => import('./ui/Profile').then((m) => ({ default: m.Profile })))
 const Timeline = lazy(() => import('./ui/Timeline').then((m) => ({ default: m.Timeline })))
 
+/** A stored number, or the seed value when what is stored is missing or unreadable. */
+function numberSetting(stored: string | undefined, fallback: string, min: number): number {
+  const n = Number(stored)
+  return stored !== undefined && Number.isFinite(n) && n >= min ? n : Number(fallback)
+}
+
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
@@ -76,17 +83,20 @@ export default function App() {
 function Tracker({ store }: { store: SqliteEventStore }) {
   const account = useAccount()
   const [events, setEvents] = useState(() => store.list())
-  const [caregiver, setCaregiver] = useState('Dad')
-  const [baby, setBaby] = useState('Baby')
-  const [birth, setBirth] = useState('')
-  const [unit, setUnit] = useState<Unit>('oz')
+  // Starting values come from the database (seeded on a fresh install), so nothing flashes a default first.
+  const [caregiver, setCaregiver] = useState(() => store.setting('caregiver') ?? account.name ?? 'Parent')
+  const [baby, setBaby] = useState(() => store.setting('baby') ?? '')
+  const [birth, setBirth] = useState(() => store.setting('birth') ?? '')
+  const [unit, setUnit] = useState<Unit>(() => (store.setting('unit') === 'ml' ? 'ml' : 'oz'))
+  const [lists, setLists] = useState(() => store.allOptions())
+  const [sleepGoalHours, setSleepGoalHours] = useState(() => numberSetting(store.setting('sleepGoalHours'), DEFAULT_SETTINGS.sleepGoalHours, 1))
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
-  const [tummyGoal, setTummyGoal] = useState(30)
+  const [tummyGoal, setTummyGoal] = useState(() => numberSetting(store.setting('tummyGoal'), DEFAULT_SETTINGS.tummyGoal, 0))
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
-  const [briefingTime, setBriefingTime] = useState('07:30')
+  const [briefingTime, setBriefingTime] = useState(() => store.setting('briefingTime') ?? DEFAULT_SETTINGS.briefingTime)
   const [ageNorms, setAgeNorms] = useState<AgeNorm[]>([])
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
@@ -133,12 +143,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       }
     })
     void loadShared()
-    void store.getSetting('unit').then((v) => (v === 'oz' || v === 'ml') && setUnit(v))
     void store.listFeatures().then(setFeatureRows)
     void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
-    void store.getSetting('briefingTime').then((v) => v && setBriefingTime(v))
     void store.listAgeNorms().then(setAgeNorms)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
@@ -433,6 +441,32 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
+  function changeSleepGoal(hours: number) {
+    setSleepGoalHours(hours)
+    void store.setSetting('sleepGoalHours', String(hours))
+  }
+
+  /** Returns why a value was refused, or nothing when it was added. */
+  async function addOption(list: ListId, value: string): Promise<string | undefined> {
+    try {
+      await store.addOption(list, value)
+    } catch (err) {
+      return err instanceof Error ? err.message : "Couldn't add that"
+    }
+    setLists(store.allOptions())
+    return undefined
+  }
+
+  async function removeOption(list: ListId, value: string) {
+    await store.removeOption(list, value)
+    setLists(store.allOptions())
+  }
+
+  async function restoreOptions(list: ListId) {
+    await store.restoreOptions(list)
+    setLists(store.allOptions())
+  }
+
   function changeTummyGoal(minutes: number) {
     setTummyGoal(minutes)
     void store.setSetting('tummyGoal', String(minutes)).then(sync.soon)
@@ -486,6 +520,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             baby={baby}
             now={now}
             unit={unit}
+            sleepGoalHours={sleepGoalHours}
             current={current}
             asleep={asleep}
             lastDone={lastDone}
@@ -518,6 +553,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             now={now}
             unit={unit}
             activityTypes={activityTypes}
+            lists={lists}
             on={on}
             onAddActivityType={addActivityType}
             tab={logTab}
@@ -541,6 +577,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             events={events}
             now={now}
             types={activityTypes}
+            quickMinutes={lists.activityMinutes.map(Number)}
             goalMin={tummyGoal}
             onGoal={changeTummyGoal}
             onLog={(draft) => void quickLog(draft)}
@@ -575,6 +612,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             unit={unit}
             theme={theme}
             onTheme={changeTheme}
+            lists={lists}
+            sleepGoalHours={sleepGoalHours}
+            onSleepGoal={changeSleepGoal}
+            onAddOption={addOption}
+            onRemoveOption={(list, value) => void removeOption(list, value)}
+            onRestoreOptions={(list) => void restoreOptions(list)}
             syncStatus={sync.status}
             onSyncNow={() => void sync.now()}
             onMembership={() => void sync.now()}

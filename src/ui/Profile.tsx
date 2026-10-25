@@ -3,6 +3,8 @@ import type { Theme } from '../domain/theme'
 import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
 import { Appearance } from './Appearance'
+import { Customize } from './Customize'
+import type { ListId } from '../domain/options'
 import { Badge, Segmented } from './controls'
 import { Family } from './Family'
 import type { SyncStatus } from './useSync'
@@ -18,6 +20,12 @@ interface Props {
   birth: string
   caregiver: string
   unit: Unit
+  lists: Record<ListId, string[]>
+  sleepGoalHours: number
+  onSleepGoal: (hours: number) => void
+  onAddOption: (list: ListId, value: string) => Promise<string | undefined>
+  onRemoveOption: (list: ListId, value: string) => void
+  onRestoreOptions: (list: ListId) => void
   syncStatus: SyncStatus
   onSyncNow: () => void
   onMembership: () => void
@@ -137,7 +145,15 @@ export function Profile(p: Readonly<Props>) {
         ))}
       </section>
 
-      <Appearance theme={p.theme} onTheme={p.onTheme} />
+      <Appearance theme={p.theme} swatches={p.lists.swatches} onTheme={p.onTheme} />
+      <Customize
+        lists={p.lists}
+        sleepGoalHours={p.sleepGoalHours}
+        onSleepGoal={p.onSleepGoal}
+        onAdd={p.onAddOption}
+        onRemove={p.onRemoveOption}
+        onRestore={p.onRestoreOptions}
+      />
 
       <section className="card">
         <div className="card-head">

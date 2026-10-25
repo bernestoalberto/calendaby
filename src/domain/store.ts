@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import type { SqlDriver } from '../db/driver'
 import { BabyEvent, type DraftEvent } from './events'
-import { activityId, DEFAULT_ACTIVITY_TYPES, type ActivityType } from './activities'
-import { DEFAULT_AGE_NORMS, type AgeNorm } from './ageNorms'
-import { DEFAULT_FEATURES, type FeatureRow } from './features'
+import { activityId, type ActivityType } from './activities'
+import type { AgeNorm } from './ageNorms'
+import type { FeatureRow } from './features'
+import { DEFAULT_LISTS, OPTION_LISTS, optionProblem, type ListId } from './options'
+import { SEEDS, type Seed } from './seeds'
 import { isSharedKey, SHARED_KEYS, type SettingChange, type SharedSetting } from './sharedSettings'
 
 export interface EventStore {
@@ -39,7 +41,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 9
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -65,10 +67,6 @@ const MIGRATIONS: Record<number, string[]> = {
       sort INTEGER NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1
     )`,
-    ...DEFAULT_FEATURES.filter((f) => !f.off).map(
-      (f, i) =>
-        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
-    ),
   ],
   3: [
     `CREATE TABLE IF NOT EXISTS activity_types (
@@ -76,19 +74,9 @@ const MIGRATIONS: Record<number, string[]> = {
       label TEXT NOT NULL,
       sort INTEGER NOT NULL
     )`,
-    ...DEFAULT_ACTIVITY_TYPES.map(
-      (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
-    ),
-    // Installs from before v3 get the activity and pumping switches (on); rows they already have are left alone.
-    ...DEFAULT_FEATURES.filter((f) => !f.off).map(
-      (f, i) =>
-        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i})`,
-    ),
   ],
-  // Crawling, walking and swimming join the seed; installs already at v3 get them here, edits are kept.
-  4: DEFAULT_ACTIVITY_TYPES.map(
-    (t, i) => `INSERT OR IGNORE INTO activity_types (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
-  ),
+  // Version 4 once added crawling, walking and swimming; the seeds (seeds.ts) now plant every starting row.
+  4: [],
   5: [
     `CREATE TABLE IF NOT EXISTS age_norms (
       from_weeks INTEGER PRIMARY KEY,
@@ -98,15 +86,8 @@ const MIGRATIONS: Record<number, string[]> = {
       naps_low INTEGER NOT NULL,
       naps_high INTEGER NOT NULL
     )`,
-    ...DEFAULT_AGE_NORMS.map(
-      (n) =>
-        `INSERT OR IGNORE INTO age_norms VALUES (${[n.fromWeeks, n.toWeeks, n.wakeMinLow, n.wakeMinHigh, n.napsLow, n.napsHigh].join(', ')})`,
-    ),
+    // An existing row is renamed here; the seed only adds rows that are missing.
     "UPDATE features SET label = 'Coming up & tonight', hint = 'Next nap, feed and bedtime with time ranges' WHERE id = 'insights'",
-    ...DEFAULT_FEATURES.map(
-      (f, i) =>
-        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i}, ${f.off ? 0 : 1})`,
-    ),
   ],
   // The outbox: one row per event with a change not yet sent. A new row number on every change lets a sync tell
   // "sent what I read" from "edited again while sending". Everything already on the phone is queued once.
@@ -129,6 +110,17 @@ const MIGRATIONS: Record<number, string[]> = {
     )`,
     `INSERT OR IGNORE INTO shared_setting (key) SELECT key FROM settings WHERE key IN (${SHARED_KEYS.map(sqlText).join(', ')})`,
   ],
+  // The lists a parent can edit. Their starting rows come from the seeds.
+  8: [
+    `CREATE TABLE IF NOT EXISTS option_list (
+      list TEXT NOT NULL,
+      value TEXT NOT NULL,
+      sort INTEGER NOT NULL,
+      PRIMARY KEY (list, value)
+    )`,
+  ],
+  // Which seeds this phone has already planted (see seeds.ts).
+  9: ['CREATE TABLE IF NOT EXISTS seed_applied (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)'],
 }
 
 /** What a phone has to send: events to upload, ids to delete, and the outbox rows these came from. */
@@ -152,6 +144,8 @@ export const LEGACY_KEY = 'calendaby.events.v1'
  */
 export class SqliteEventStore implements EventStore {
   private events: BabyEvent[] = []
+  private settings = new Map<string, string>()
+  private lists = new Map<string, string[]>()
   private readonly db: SqlDriver
   private readonly newId: () => string
 
@@ -164,9 +158,11 @@ export class SqliteEventStore implements EventStore {
     db: SqlDriver,
     legacy?: Storage,
     newId: () => string = randomId,
+    seeds: Seed[] = SEEDS,
   ): Promise<SqliteEventStore> {
     const store = new SqliteEventStore(db, newId)
-    await store.migrate()
+    const from = await store.migrate()
+    await store.plant(seeds, from)
     if (legacy) await store.importLegacy(legacy)
     await store.load()
     return store
@@ -176,11 +172,24 @@ export class SqliteEventStore implements EventStore {
     return this.db.persistent
   }
 
-  private async migrate(): Promise<void> {
+  /** Runs the schema steps this phone has not had yet. Returns the version it started from. */
+  private async migrate(): Promise<number> {
     const [{ user_version }] = await this.db.query<{ user_version: number }>('PRAGMA user_version')
     for (let v = user_version + 1; v <= SCHEMA_VERSION; v++) {
       for (const sql of MIGRATIONS[v]) await this.db.exec(sql)
       await this.db.exec(`PRAGMA user_version = ${v}`)
+    }
+    return user_version
+  }
+
+  /** Plants each seed this phone has not had. `from` is the schema version the phone started at. */
+  private async plant(seeds: Seed[], from: number): Promise<void> {
+    const done = new Set((await this.db.query<{ id: string }>('SELECT id FROM seed_applied')).map((r) => r.id))
+    for (const seed of seeds) {
+      if (done.has(seed.id)) continue
+      // A phone already past `since` got this data from the migrations that used to plant it; do not plant it again.
+      if (!(from > 0 && from >= seed.since)) for (const sql of seed.statements) await this.db.exec(sql)
+      await this.db.exec('INSERT OR IGNORE INTO seed_applied (id, applied_at) VALUES (?, ?)', [seed.id, Date.now()])
     }
   }
 
@@ -197,6 +206,8 @@ export class SqliteEventStore implements EventStore {
   }
 
   private async load(): Promise<void> {
+    for (const r of await this.db.query<{ key: string; value: string }>('SELECT key, value FROM settings')) this.settings.set(r.key, r.value)
+    await this.loadLists()
     const rows = await this.db.query<{ body: string }>('SELECT body FROM events ORDER BY at')
     this.events = rows.flatMap((r) => {
       const parsed = BabyEvent.safeParse(JSON.parse(r.body))
@@ -215,6 +226,44 @@ export class SqliteEventStore implements EventStore {
   /** REPLACE gives the row a new number, so a sync in flight will not clear a change made after it read. */
   private queue(id: string, op: 'put' | 'delete'): Promise<void> {
     return this.db.exec('INSERT OR REPLACE INTO sync_pending (id, op) VALUES (?, ?)', [id, op])
+  }
+
+  private async loadLists(): Promise<void> {
+    this.lists.clear()
+    const rows = await this.db.query<{ list: string; value: string }>('SELECT list, value FROM option_list ORDER BY sort, value')
+    for (const r of rows) this.lists.set(r.list, [...(this.lists.get(r.list) ?? []), r.value])
+  }
+
+  /** What a list holds right now, in order. Read straight from memory, so screens need not wait. */
+  options(list: ListId): string[] {
+    return [...(this.lists.get(list) ?? [])]
+  }
+
+  allOptions(): Record<ListId, string[]> {
+    return Object.fromEntries(OPTION_LISTS.map((l) => [l.id, this.options(l.id)])) as Record<ListId, string[]>
+  }
+
+  async addOption(list: ListId, raw: string): Promise<void> {
+    const problem = optionProblem(list, raw)
+    if (problem) throw new Error(problem)
+    await this.db.exec(
+      'INSERT OR IGNORE INTO option_list (list, value, sort) VALUES (?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM option_list WHERE list = ?))',
+      [list, raw.trim(), list],
+    )
+    await this.loadLists()
+  }
+
+  async removeOption(list: ListId, value: string): Promise<void> {
+    await this.db.exec('DELETE FROM option_list WHERE list = ? AND value = ?', [list, value])
+    await this.loadLists()
+  }
+
+  /** Puts back any of the original items that were removed; anything added stays. */
+  async restoreOptions(list: ListId): Promise<void> {
+    for (const [i, value] of DEFAULT_LISTS[list].entries()) {
+      await this.db.exec('INSERT OR IGNORE INTO option_list (list, value, sort) VALUES (?, ?, ?)', [list, value, i])
+    }
+    await this.loadLists()
   }
 
   list(): BabyEvent[] {
@@ -352,8 +401,12 @@ export class SqliteEventStore implements EventStore {
   }
 
   async getSetting(key: string): Promise<string | undefined> {
-    const rows = await this.db.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', [key])
-    return rows[0]?.value
+    return this.settings.get(key)
+  }
+
+  /** Same as getSetting, for screens that need the value on their first render. */
+  setting(key: string): string | undefined {
+    return this.settings.get(key)
   }
 
   async setSetting(key: string, value: string): Promise<void> {
@@ -368,8 +421,9 @@ export class SqliteEventStore implements EventStore {
     }
   }
 
-  private putSetting(key: string, value: string): Promise<void> {
-    return this.db.exec(
+  private async putSetting(key: string, value: string): Promise<void> {
+    this.settings.set(key, value)
+    await this.db.exec(
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       [key, value],
     )

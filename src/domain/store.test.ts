@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NodeSqlDriver } from '../db/node-driver.test-util'
+import { DEFAULT_LISTS } from './options'
+import { SEEDS, type Seed } from './seeds'
 import { DuplicateEventError, LEGACY_KEY, SqliteEventStore } from './store'
 
 class MapStorage implements Storage {
@@ -269,9 +271,125 @@ describe('shared settings on the phone', () => {
   it('queues settings that were on the phone before sharing existed', async () => {
     const driver = new NodeSqlDriver()
     await SqliteEventStore.open(driver)
-    driver.db.exec("DROP TABLE shared_setting; PRAGMA user_version = 6; INSERT INTO settings (key, value) VALUES ('baby', 'Old')")
+    driver.db.exec("DROP TABLE shared_setting; PRAGMA user_version = 6; DELETE FROM settings; INSERT INTO settings (key, value) VALUES ('baby', 'Old')")
     const store = await SqliteEventStore.open(driver)
     expect((await store.pendingSettings()).changes).toEqual([{ key: 'baby', value: 'Old', onlyIfMissing: true }])
   })
 })
 
+describe('lists and defaults in the database', () => {
+  it('seeds the lists and the default settings on a fresh phone', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    expect(store.options('meds')).toEqual(DEFAULT_LISTS.meds)
+    expect(store.options('amountsOz')).toEqual(['2', '4', '5', '6', '8'])
+    expect(store.setting('baby')).toBe('Baby')
+    expect(store.setting('sleepGoalHours')).toBe('14')
+  })
+
+  it('adds and removes an item and remembers it after reopening', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.addOption('meds', 'Probiotic')
+    await store.removeOption('meds', 'Tylenol')
+    expect(store.options('meds')).toEqual(['Vitamin D', 'Ibuprofen', 'Gripe water', 'Gas drops', 'Probiotic'])
+    const again = await SqliteEventStore.open(driver)
+    expect(again.options('meds')).toEqual(store.options('meds'))
+  })
+
+  it('does not bring a removed item back when reopened, and restores it on request', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.removeOption('meds', 'Tylenol')
+    expect((await SqliteEventStore.open(driver)).options('meds')).not.toContain('Tylenol')
+    await store.restoreOptions('meds')
+    expect(store.options('meds')).toContain('Tylenol')
+  })
+
+  it('refuses a value the list cannot hold', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await expect(store.addOption('amountsMl', 'a lot')).rejects.toThrow()
+    await expect(store.addOption('meds', '   ')).rejects.toThrow()
+    await expect(store.addOption('swatches', 'Red|red')).rejects.toThrow()
+    expect(store.options('amountsMl')).toEqual(DEFAULT_LISTS.amountsMl)
+  })
+
+  it('keeps one copy of an item added twice and sorts a new one last', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.addOption('feedTags', 'Sleepy')
+    await store.addOption('feedTags', 'Sleepy')
+    expect(store.options('feedTags').filter((t) => t === 'Sleepy')).toHaveLength(1)
+    expect(store.options('feedTags').at(-1)).toBe('Sleepy')
+  })
+
+  it('keeps what a parent already set when the seeds arrive in an update', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.setSetting('baby', 'Lily')
+    driver.db.exec('DROP TABLE option_list; DROP TABLE seed_applied; PRAGMA user_version = 7')
+    const updated = await SqliteEventStore.open(driver)
+    expect(updated.setting('baby')).toBe('Lily')
+    expect(updated.options('meds')).toEqual(DEFAULT_LISTS.meds)
+  })
+
+  it('reads a setting immediately after it is saved', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('sleepGoalHours', '12')
+    expect(store.setting('sleepGoalHours')).toBe('12')
+    expect(await store.getSetting('sleepGoalHours')).toBe('12')
+  })
+})
+
+
+describe('seeding', () => {
+  const later: Seed = {
+    id: 'settings-test-later',
+    since: Number.POSITIVE_INFINITY,
+    statements: ["INSERT OR IGNORE INTO settings (key, value) VALUES ('nightStartHour', '19')"],
+  }
+
+  it('plants every seed once on a fresh phone and records it', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    const done = driver.db.prepare('SELECT id FROM seed_applied ORDER BY id').all().map((r) => r.id)
+    expect(done).toEqual(SEEDS.map((s) => s.id).sort())
+    expect((await store.listFeatures()).length).toBeGreaterThan(10)
+    expect((await store.listActivityTypes()).map((t) => t.id)).toContain('swim')
+    expect((await store.listAgeNorms()).length).toBeGreaterThan(5)
+    expect(store.setting('tummyGoal')).toBe('30')
+  })
+
+  it('gives an existing phone a seed added later, once, and never overwrites an edit', async () => {
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver)
+    const updated = await SqliteEventStore.open(driver, undefined, undefined, [...SEEDS, later])
+    expect(updated.setting('nightStartHour')).toBe('19')
+
+    await updated.setSetting('nightStartHour', '20')
+    const again = await SqliteEventStore.open(driver, undefined, undefined, [...SEEDS, later])
+    expect(again.setting('nightStartHour')).toBe('20')
+  })
+
+  it('does not plant a seed again where the old migrations already did', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.removeOption('meds', 'Tylenol')
+    await store.setSetting('baby', 'Lily')
+    driver.db.exec('DROP TABLE seed_applied; PRAGMA user_version = 8')
+    const upgraded = await SqliteEventStore.open(driver)
+    expect(upgraded.options('meds')).not.toContain('Tylenol')
+    expect(upgraded.setting('baby')).toBe('Lily')
+  })
+
+  it('fills in what an older phone is missing without touching what it has', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.setFeature('timeline', false)
+    await store.addActivityType('Music time')
+    driver.db.exec("DROP TABLE seed_applied; DELETE FROM activity_types WHERE id = 'swim'; PRAGMA user_version = 3")
+    const upgraded = await SqliteEventStore.open(driver)
+    const types = (await upgraded.listActivityTypes()).map((t) => t.id)
+    expect(types).toContain('swim')
+    expect(types).toContain('music-time')
+    expect((await upgraded.listFeatures()).find((f) => f.id === 'timeline')?.enabled).toBe(false)
+  })
+})
