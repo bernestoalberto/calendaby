@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { registerSW } from 'virtual:pwa-register'
+import { keepStorage } from './keepStorage'
 
 /**
  * Browsers get the offline service worker. The native shells bundle their files, and a service worker
@@ -8,6 +9,7 @@ import { registerSW } from 'virtual:pwa-register'
 export async function setUpServiceWorker(): Promise<void> {
   if (!Capacitor.isNativePlatform()) {
     registerSW({ immediate: true })
+    keepStorage().catch((err: unknown) => console.warn('Could not ask the browser to keep its saved data', err))
     return
   }
   const regs = (await navigator.serviceWorker?.getRegistrations()) ?? []
