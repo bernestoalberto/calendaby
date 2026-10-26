@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useSpeech } from '../useSpeech'
 import { Badge } from './controls'
 import { CheckIcon, MicIcon, SendIcon, SparkIcon } from './icons'
+import { speakable } from '../domain/replyBlocks'
+import { scrollBehavior } from '../motion'
+import { Listen } from './Listen'
 import { Reply } from './Reply'
 
 export type Chat = { role: 'you' | 'agent'; text: string; logged?: string[] }
@@ -26,7 +29,7 @@ export function Agent({ baby, chat, busy, online, onSend }: Readonly<Props>) {
   ]
 
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: 'smooth' })
+    end.current?.scrollIntoView({ behavior: scrollBehavior() })
   }, [chat.length, busy])
 
   function send(value: string) {
@@ -66,10 +69,18 @@ export function Agent({ baby, chat, busy, online, onSend }: Readonly<Props>) {
         </section>
       )}
 
-      <ol className="chat">
+      {/* Polite, so a screen reader announces each new reply without cutting off what it is saying. */}
+      <ol className="chat" aria-live="polite" aria-relevant="additions">
         {chat.map((m) => (
           <li key={`${m.role}:${m.text}`} className={`bubble ${m.role}`}>
-            {m.role === 'agent' ? <Reply text={m.text} /> : m.text}
+            {m.role === 'agent' ? (
+              <>
+                <Reply text={m.text} />
+                <Listen text={speakable(m.text)} />
+              </>
+            ) : (
+              m.text
+            )}
             {m.logged && m.logged.length > 0 && (
               <span className="logged">
                 {m.logged.map((l) => (
@@ -81,7 +92,11 @@ export function Agent({ baby, chat, busy, online, onSend }: Readonly<Props>) {
             )}
           </li>
         ))}
-        {busy && <li className="bubble agent typing">Thinking…</li>}
+        {busy && (
+          <li className="bubble agent typing" role="status">
+            Thinking…
+          </li>
+        )}
       </ol>
       <div ref={end} />
 

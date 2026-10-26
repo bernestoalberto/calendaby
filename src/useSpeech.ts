@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition as NativeSpeech } from '@capgo/capacitor-speech-recognition'
 import { useEffect, useRef, useState } from 'react'
+import { cleanSpoken } from './domain/spoken'
 import { speechProblem } from './speechErrors'
 
 // The Web Speech API is not in the TS DOM lib; type only what we use.
@@ -53,7 +54,7 @@ export function useSpeech(onText: (text: string) => void, onProblem?: (message: 
     setListening(true)
     try {
       const { matches } = await NativeSpeech.start({ language: navigator.language || 'en-US', partialResults: false, popup: false })
-      const heard = matches?.[0]?.trim()
+      const heard = cleanSpoken(matches?.[0] ?? '')
       if (heard) onTextRef.current(heard)
     } catch {
       onProblemRef.current?.("Couldn't hear that. Try again.")
@@ -72,10 +73,7 @@ export function useSpeech(onText: (text: string) => void, onProblem?: (message: 
     r.lang = navigator.language || 'en-US'
     r.interimResults = false
     r.onresult = (e) => {
-      const heard = Array.from(e.results)
-        .map((res) => res[0].transcript)
-        .join(' ')
-        .trim()
+      const heard = cleanSpoken(Array.from(e.results).map((res) => res[0].transcript).join(' '))
       if (heard) onTextRef.current(heard)
     }
     r.onerror = (e) => {

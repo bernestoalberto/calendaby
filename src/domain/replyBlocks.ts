@@ -26,6 +26,22 @@ function inline(line: string): Inline[] {
   return out
 }
 
+/** The reply as plain sentences for a voice: no symbols, links said as their label (or just "link"), numbered steps counted. */
+export function speakable(reply: string): string {
+  const say = (parts: Inline[]) => parts.map((p) => (p.kind === 'link' && p.text === p.href ? 'link' : p.text)).join('').replaceAll(/\s+/g, ' ').trim()
+  const sentence = (parts: Inline[]) => {
+    const s = say(parts)
+    return /[.!?]$/.test(s) ? s : `${s}.`
+  }
+  return parseReply(reply)
+    .flatMap((block) => {
+      if (block.type === 'p') return [sentence(block.inline)]
+      return block.items.map((item, i) => (block.type === 'ol' ? `Step ${i + 1}. ${sentence(item)}` : sentence(item)))
+    })
+    .filter((s) => s !== '.')
+    .join(' ')
+}
+
 export function parseReply(reply: string): Block[] {
   const blocks: Block[] = []
   let paragraph: string[] = []

@@ -1895,6 +1895,59 @@ button.insight-row {
   margin-bottom: 0;
 }
 
+/* Reading aloud: a quiet text button, at least 44px tall so it is easy to hit. */
+.listen {
+  display: inline-block;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-mid);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.listen[aria-pressed='true'] {
+  background: var(--primary-2);
+  color: #fff;
+}
+
+/* Keyboard and screen reader users can jump past the top bar. Hidden until it has focus. */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -64px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  background: var(--primary-2);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: calc(8px + env(safe-area-inset-top));
+}
+
+main:focus {
+  outline: none;
+}
+
+/* People who turn on "reduce motion" (Android: Remove animations) get no movement at all, only instant changes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .reply a {
   color: var(--primary-2);
   text-decoration: underline;

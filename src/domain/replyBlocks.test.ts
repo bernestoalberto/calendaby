@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { parseReply } from './replyBlocks'
+import { parseReply, speakable } from './replyBlocks'
+
+describe('speakable', () => {
+  it('turns a formatted reply into sentences a voice can read, without symbols or addresses', () => {
+    const reply = "Next nap is around **2:10 PM**.\n\n- Offer a feed at **1:30 PM**.\n- Wind down from 1:55 PM\n\nSee [CDC](https://www.cdc.gov/sleep) and https://www.cdc.gov/vaccines."
+    expect(speakable(reply)).toBe('Next nap is around 2:10 PM. Offer a feed at 1:30 PM. Wind down from 1:55 PM. See CDC and link.')
+  })
+
+  it('says the step number for numbered lists', () => {
+    expect(speakable('1. Feed\n2. Burp')).toBe('Step 1. Feed. Step 2. Burp.')
+  })
+
+  it('is empty for empty text', () => {
+    expect(speakable('  ')).toBe('')
+  })
+})
 
 const text = (t: string) => ({ kind: 'text', text: t })
 const bold = (t: string) => ({ kind: 'bold', text: t })

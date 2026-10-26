@@ -33,6 +33,8 @@ import {
 } from './notifications'
 import { useAccount } from './ui/accountContext'
 import type { Chat } from './ui/Agent'
+import { speakable } from './domain/replyBlocks'
+import { Listen } from './ui/Listen'
 import { Sheet } from './ui/controls'
 import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
@@ -590,6 +592,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   return (
     <ThemeContext.Provider value={theme}>
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
       <header className="topbar" {...sectionProps(theme, 'topbar')}>
         <div className="topbar-left">
           <span className="logo" aria-hidden="true">
@@ -611,7 +616,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       </header>
       {!store.persistent && <p className="warning">Not saved: entries are kept only when the app is opened over https or localhost.</p>}
 
-      <main>
+      <main id="main" tabIndex={-1}>
         <Suspense fallback={<p className="muted">Loading…</p>}>
         {tab === 'today' && (
           <Today
@@ -799,6 +804,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           <section className="card handoff">
             <p className="eyebrow">Handing over from {caregiver}</p>
             <h2>{brief.headline}</h2>
+            <Listen text={speakable(handoffText(brief))} />
             <ul>
               {brief.lines.map((l) => (
                 <li key={l}>{l}</li>
