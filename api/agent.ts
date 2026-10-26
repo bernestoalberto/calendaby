@@ -2,13 +2,11 @@ import { apiKey, runAgent } from '../agent/agent.js'
 import { googleFor } from '../agent/google.js'
 import { authenticate } from '../backend/auth.js'
 import { sharedDb } from '../backend/app.js'
+import { isAllowedOrigin } from '../backend/origins.js'
 import { AgentRequest, AgentResponse } from '../src/agents/remote.js'
 
-const NATIVE_ORIGINS = new Set(['https://localhost', 'capacitor://localhost'])
-
-function corsHeaders(origin: string | null): Record<string, string> {
-  const allowed = process.env.AGENT_ALLOWED_ORIGIN
-  if (origin && (origin === allowed || NATIVE_ORIGINS.has(origin))) {
+function corsHeaders(origin: string | null, requestUrl: string): Record<string, string> {
+  if (origin && isAllowedOrigin(origin, requestUrl, process.env.AGENT_ALLOWED_ORIGIN)) {
     return {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -19,19 +17,19 @@ function corsHeaders(origin: string | null): Record<string, string> {
 }
 
 export function OPTIONS(request: Request): Response {
-  return new Response(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) })
+  return new Response(null, { status: 204, headers: corsHeaders(request.headers.get('origin'), request.url) })
 }
 
 export async function POST(request: Request): Promise<Response> {
   const origin = request.headers.get('origin')
-  const headers = corsHeaders(origin)
+  const headers = corsHeaders(origin, request.url)
 
   if (!apiKey()) {
     return Response.json({ error: 'Agent is not configured' }, { status: 503, headers })
   }
 
   const allowed = process.env.AGENT_ALLOWED_ORIGIN
-  if (allowed && origin !== allowed && (!origin || !NATIVE_ORIGINS.has(origin))) {
+  if (allowed && !isAllowedOrigin(origin, request.url, allowed)) {
     return Response.json({ error: 'Forbidden' }, { status: 403, headers })
   }
 

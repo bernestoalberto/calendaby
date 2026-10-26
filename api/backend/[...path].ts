@@ -5,9 +5,9 @@ import { gmailImporter } from '../../agent/appointments.js'
 import { createApp, sharedDb } from '../../backend/app.js'
 import { userCalendar } from '../../backend/calendar.js'
 import { openShared, type SharedStore } from '../../backend/household.js'
+import { isAllowedOrigin } from '../../backend/origins.js'
 
 // Same origins as api/agent.ts: the web app, plus the Capacitor shells that call us cross-origin.
-const NATIVE_ORIGINS = new Set(['https://localhost', 'capacitor://localhost'])
 
 let opening: Promise<SharedStore> | undefined
 
@@ -25,7 +25,7 @@ function handler() {
   root.use(
     '*',
     cors({
-      origin: (origin) => (origin === process.env.AGENT_ALLOWED_ORIGIN || NATIVE_ORIGINS.has(origin) ? origin : null),
+      origin: (origin, c) => (isAllowedOrigin(origin, c.req.url, process.env.AGENT_ALLOWED_ORIGIN) ? origin : null),
       allowMethods: ['POST', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
     }),
