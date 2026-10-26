@@ -142,6 +142,32 @@ describe('two phones, two accounts, one household', () => {
     expect(((await mom('householdInfo', {})) as Info).role).toBe('owner')
   })
 
+  it('shows the new family\'s whole log to someone who moves from a family that has other people', async () => {
+    const mom = await phone()
+    const dad = await phone()
+    const gran = await phone()
+    await join(callAs('tok_mom'), callAs('tok_dad'), 'Dad')
+    await mom.append(feed(1_000_000), 'Mom')
+    await syncOnce(mom, callAs('tok_mom'))
+    await syncOnce(dad, callAs('tok_dad'))
+    await gran.append(feed(5_000_000), 'Gran')
+    await gran.append({ kind: 'note', at: 6_000_000, note: 'bath' }, 'Gran')
+    await syncOnce(gran, callAs('tok_gran'))
+
+    const { code } = (await callAs('tok_gran')('createInvite', {})) as { code: string }
+    await callAs('tok_dad')('joinHousehold', { code, name: 'Dad' })
+    await syncOnce(dad, callAs('tok_dad'))
+
+    expect(dad.list().map((e) => e.at)).toEqual(expect.arrayContaining([5_000_000, 6_000_000]))
+    await syncOnce(gran, callAs('tok_gran'))
+    await gran.append(feed(7_000_000), 'Gran')
+    await syncOnce(gran, callAs('tok_gran'))
+    await syncOnce(dad, callAs('tok_dad'))
+    expect(dad.list().map((e) => e.at)).toContain(7_000_000)
+    // Mom logged this in the family Dad left; it must not follow him into Gran's.
+    expect(gran.list().map((e) => e.at)).not.toContain(1_000_000)
+  })
+
   it('accepts a code however a phone or messaging app rewrote it', async () => {
     const mom = callAs('tok_mom')
     await mom('householdInfo', { name: 'Mom' })
@@ -173,7 +199,8 @@ describe('two phones, two accounts, one household', () => {
     await mom.append(feed(2_000_000), 'Mom')
     await syncOnce(mom, callAs('tok_mom'))
     await syncOnce(dad, callAs('tok_dad'))
-    expect(dad.list()).toHaveLength(1)
+    // Mom's entries belong to the family Dad was removed from, so they leave his phone; what he logged himself stays.
+    expect(dad.list()).toEqual([])
     expect(mom.list()).toHaveLength(2)
   })
 

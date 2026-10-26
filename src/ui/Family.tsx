@@ -182,10 +182,10 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
         </div>
       )}
 
-      {alone && (
+      {info && (
         <div className="stack">
           <label className="field">
-            <span className="field-label">Have a code from someone else?</span>
+            <span className="field-label">{alone ? 'Have a code from someone else?' : 'Join a different family with a code'}</span>
             <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="ABC-123" autoCapitalize="characters" maxLength={12} />
           </label>
           {!preview && (
@@ -197,6 +197,8 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
             <>
               <p>
                 Join <b>{preview.ownerName}</b>&apos;s family? Your logs on this phone are added to theirs, and you will see theirs.
+                {!alone && ' You will leave your current family and stop seeing its log.'}
+                {owner && !alone && ' The person who has been in it longest becomes its owner.'}
               </p>
               <button type="button" className="pill primary" disabled={busy} onClick={() => void join()}>
                 Join

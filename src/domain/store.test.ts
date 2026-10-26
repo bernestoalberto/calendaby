@@ -187,6 +187,32 @@ describe('sync outbox', () => {
     expect((await store.pending(200)).events.map((e) => e.id)).toEqual(['old1'])
   })
 
+  it('leaving a family drops what other caregivers logged and keeps and re-sends only its own', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const mine = await store.append(feed, 'dad')
+    await store.markSynced((await store.pending(200)).sent)
+    await store.applyRemote([{ event: { ...feed, id: 'r1', at: feed.at + 3_600_000, loggedBy: 'mom' }, deleted: false }])
+    // Own change coming back from the server must not turn it into someone else's entry.
+    await store.applyRemote([{ event: mine, deleted: false }])
+
+    await store.resetSync('another-family')
+    expect(store.list().map((e) => e.id)).toEqual([mine.id])
+    expect((await store.pending(200)).events.map((e) => e.id)).toEqual([mine.id])
+  })
+
+  it('upgrades a phone that has events from before the origin was recorded', async () => {
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver)
+    const old = { id: 'old1', kind: 'note', at: 5_000, loggedBy: 'dad', note: 'before' }
+    driver.db.exec('ALTER TABLE events DROP COLUMN remote; PRAGMA user_version = 9')
+    driver.db.prepare('INSERT INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      old.id, old.kind, old.at, old.loggedBy, JSON.stringify(old), 1,
+    )
+    const store = await SqliteEventStore.open(driver)
+    await store.resetSync('another-family')
+    expect(store.list().map((e) => e.id)).toEqual(['old1'])
+  })
+
   it('applies changes from another phone without queueing them back', async () => {
     const store = await SqliteEventStore.open(new NodeSqlDriver())
     const remote = { ...feed, id: 'r1', loggedBy: 'mom' }

@@ -41,7 +41,13 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 9
+const SCHEMA_VERSION = 10
+
+// An entry this phone already had keeps its origin; the server also sends back what this phone uploaded.
+const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at, remote)
+  VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT remote FROM events WHERE id = ?), 1))`
+const DROP_REMOTE_PENDING_SQL = 'DELETE FROM sync_pending WHERE id IN (SELECT id FROM events WHERE remote = 1)'
+const DROP_REMOTE_EVENTS_SQL = 'DELETE FROM events WHERE remote = 1'
 
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
@@ -121,6 +127,9 @@ const MIGRATIONS: Record<number, string[]> = {
   ],
   // Which seeds this phone has already planted (see seeds.ts).
   9: ['CREATE TABLE IF NOT EXISTS seed_applied (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)'],
+  // 1 for an entry that first arrived from another caregiver's phone, so leaving a family can drop those and keep its own.
+  // Entries already on a phone count as its own, because their origin was never recorded.
+  10: ['ALTER TABLE events ADD COLUMN remote INTEGER NOT NULL DEFAULT 0'],
 }
 
 /** What a phone has to send: events to upload, ids to delete, and the outbox rows these came from. */
@@ -172,11 +181,24 @@ export class SqliteEventStore implements EventStore {
     return this.db.persistent
   }
 
+  /**
+   * SQLite cannot say "ADD COLUMN IF NOT EXISTS". If the app was closed after the column was added but before the version
+   * number was saved, the step runs again, and a column that is already there is exactly what it wanted.
+   */
+  private async runStep(sql: string): Promise<void> {
+    try {
+      await this.db.exec(sql)
+    } catch (err) {
+      const again = /^ALTER TABLE \w+ ADD COLUMN/i.test(sql) && err instanceof Error && /duplicate column name/i.test(err.message)
+      if (!again) throw err
+    }
+  }
+
   /** Runs the schema steps this phone has not had yet. Returns the version it started from. */
   private async migrate(): Promise<number> {
     const [{ user_version }] = await this.db.query<{ user_version: number }>('PRAGMA user_version')
     for (let v = user_version + 1; v <= SCHEMA_VERSION; v++) {
-      for (const sql of MIGRATIONS[v]) await this.db.exec(sql)
+      for (const sql of MIGRATIONS[v]) await this.runStep(sql)
       await this.db.exec(`PRAGMA user_version = ${v}`)
     }
     return user_version
@@ -208,6 +230,10 @@ export class SqliteEventStore implements EventStore {
   private async load(): Promise<void> {
     for (const r of await this.db.query<{ key: string; value: string }>('SELECT key, value FROM settings')) this.settings.set(r.key, r.value)
     await this.loadLists()
+    await this.reloadEvents()
+  }
+
+  private async reloadEvents(): Promise<void> {
     const rows = await this.db.query<{ body: string }>('SELECT body FROM events ORDER BY at')
     this.events = rows.flatMap((r) => {
       const parsed = BabyEvent.safeParse(JSON.parse(r.body))
@@ -332,10 +358,7 @@ export class SqliteEventStore implements EventStore {
         await this.db.exec('DELETE FROM events WHERE id = ?', [event.id])
         this.events = this.events.filter((e) => e.id !== event.id)
       } else {
-        await this.db.exec(
-          'INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [event.id, event.kind, event.at, event.loggedBy, JSON.stringify(event), Date.now()],
-        )
+        await this.db.exec(UPSERT_REMOTE_EVENT_SQL, [event.id, event.kind, event.at, event.loggedBy, JSON.stringify(event), Date.now(), event.id])
         this.events = [...this.events.filter((e) => e.id !== event.id), event].sort((a, b) => a.at - b.at)
       }
       applied++
@@ -359,9 +382,15 @@ export class SqliteEventStore implements EventStore {
     await this.db.exec('UPDATE shared_setting SET fill = 1 WHERE version > synced')
   }
 
-  /** A different household: forget the position and send everything on this phone there. */
+  /**
+   * A different household: forget the position, drop what other caregivers logged in the one left (it belongs to that
+   * family, not this one), and send what this phone logged itself.
+   */
   async resetSync(household: string): Promise<void> {
     await this.setSyncState(household, 0)
+    await this.db.exec(DROP_REMOTE_PENDING_SQL)
+    await this.db.exec(DROP_REMOTE_EVENTS_SQL)
+    await this.reloadEvents()
     await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
     await this.db.exec('UPDATE shared_setting SET version = version + 1, fill = 1')
   }

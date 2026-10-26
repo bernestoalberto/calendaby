@@ -5,6 +5,7 @@
 3. Tests never call a model, AWS or the network; use the stub model and stand-ins.
 4. Python: always `uv run`. TypeScript: npm scripts that work on Windows, macOS and Linux.
 5. No secrets in git. `.env` files stay local; `.env.example` documents them.
+6. SQL lives in named constants (for example `UPSERT_REMOTE_EVENT_SQL`) kept apart from the logic that runs it, not inline in method bodies. Move older inline queries when you touch that code.
 
 ## Nine working rules
 

@@ -179,12 +179,23 @@ describe('households and invites', () => {
     expect(await store.householdOf('user_b')).toBeUndefined()
   })
 
-  it('does not move someone who already shares a household with others', async () => {
+  it('moves someone who already shares a household with others when they accept a code', async () => {
     const first = await store.createInvite(A, 'user_a')
     await store.redeemInvite('user_b', first.code)
-    const other = await store.createInvite(await store.ensureHousehold('user_c'), 'user_c')
-    await expect(store.redeemInvite('user_b', other.code)).rejects.toMatchObject({ problem: 'in_household' })
-    expect(await store.householdOf('user_b')).toBe(A)
+    const C = await store.ensureHousehold('user_c')
+    const other = await store.createInvite(C, 'user_c')
+    await store.redeemInvite('user_b', other.code, 'Bea')
+    expect(await store.householdOf('user_b')).toBe(C)
+    expect((await store.members(C)).map((m) => [m.userId, m.role])).toEqual([['user_c', 'owner'], ['user_b', 'member']])
+    expect((await store.members(A)).map((m) => [m.userId, m.role])).toEqual([['user_a', 'owner']])
+  })
+
+  it('hands the old family to its longest-standing member when its owner moves away', async () => {
+    for (const user of ['user_b', 'user_d']) await store.redeemInvite(user, (await store.createInvite(A, 'user_a')).code)
+    const C = await store.ensureHousehold('user_c')
+    await store.redeemInvite('user_a', (await store.createInvite(C, 'user_c')).code)
+    expect(await store.householdOf('user_a')).toBe(C)
+    expect((await store.members(A)).map((m) => [m.userId, m.role])).toEqual([['user_b', 'owner'], ['user_d', 'member']])
   })
 })
 

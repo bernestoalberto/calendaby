@@ -22,7 +22,7 @@ export interface Member {
   joinedAt: number
 }
 
-export type InviteProblem = 'invalid' | 'too_many_attempts' | 'in_household' | 'owner_leaving' | 'not_owner'
+export type InviteProblem = 'invalid' | 'too_many_attempts' | 'owner_leaving' | 'not_owner'
 
 /** A problem the caller can show the parent. The message never says whether a code existed, expired or was used. */
 export class HouseholdError extends Error {
@@ -43,7 +43,10 @@ export interface SharedStore {
   createInvite(householdId: string, createdBy: string): Promise<{ code: string; expiresAt: number }>
   /** Who owns the household behind a code, so the joiner can check before accepting. Does not use the code. */
   previewInvite(userId: string, code: string): Promise<{ ownerName: string }>
-  /** Joins the household behind a code. Moves the user out of any household they were alone in. */
+  /**
+   * Joins the household behind a code as a member, leaving any household they were in. If they owned the one they leave,
+   * its longest-standing member becomes the owner.
+   */
   redeemInvite(userId: string, code: string, name?: string): Promise<string>
   /** The owner removes someone. Their logs stay; they lose access. False when they were not a member. */
   removeMember(householdId: string, ownerId: string, userId: string): Promise<boolean>
@@ -70,6 +73,12 @@ const MAX_FAILED_TRIES = 5
 const TRY_WINDOW_MS = 10 * 60_000
 // No 0/O/1/I/L, so a code read aloud or typed from a screenshot survives.
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+const RENAME_MEMBER_SQL = 'UPDATE member SET name = ? WHERE user_id = ? AND name <> ?'
+// If the one who moved was the old family's owner, the longest-standing member takes over; otherwise nothing changes.
+const PROMOTE_SUCCESSOR_SQL = `UPDATE member SET role = 'owner'
+  WHERE user_id = (SELECT user_id FROM member WHERE household_id = ?1 ORDER BY joined_at, user_id LIMIT 1)
+    AND NOT EXISTS (SELECT 1 FROM member WHERE household_id = ?1 AND role = 'owner')`
 
 // Each entry runs once, in order. Never edit an entry that has shipped; add a new one.
 const MIGRATIONS: string[][] = [
@@ -170,7 +179,7 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
     const existing = await householdOf(userId)
     if (existing) {
       // The household can start before the phone knows the caregiver's name, so a later real name replaces the placeholder.
-      if (name) await db.execute({ sql: 'UPDATE member SET name = ? WHERE user_id = ? AND name <> ?', args: [name, userId, name] })
+      if (name) await db.execute({ sql: RENAME_MEMBER_SQL, args: [name, userId, name] })
       return existing
     }
     const id = crypto.randomUUID()
@@ -236,9 +245,6 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
       const householdId = await findInvite(userId, code)
       const current = await householdOf(userId)
       if (current === householdId) return householdId
-      if (current && (await members(current)).length > 1) {
-        throw new HouseholdError('in_household', 'Leave your current household first.')
-      }
       const at = now()
       // Marking the code used in the same batch is what makes it single-use.
       const results = await db.batch(
@@ -249,6 +255,7 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
             sql: "INSERT OR REPLACE INTO member (user_id, household_id, role, name, joined_at) SELECT ?, ?, 'member', ?, ? WHERE changes() > 0",
             args: [userId, householdId, name, at],
           },
+          { sql: PROMOTE_SUCCESSOR_SQL, args: [current ?? ''] },
         ],
         'write',
       )
