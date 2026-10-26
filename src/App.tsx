@@ -115,7 +115,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [joinCode, setJoinCode] = useState(peekPendingJoin)
   const [tab, setTab] = useState<Tab>(joinCode ? 'profile' : 'today')
   // Only the name of the screen, and only once a parent has turned sharing on (track does nothing otherwise).
-  useEffect(() => track('screen_view', { screen: tab }), [tab])
+  useEffect(() => track('screen_opened', { screen: tab }), [tab])
   useEffect(() => {
     if (tab === 'profile' || joinCode === undefined) return
     forgetPendingJoin()

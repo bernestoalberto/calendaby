@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 interface Page {
-  dataLayer?: IArguments[]
+  dataLayer?: unknown[]
   [flag: string]: unknown
 }
 
 let page: Page
 let scripts: { src?: string; async?: boolean }[]
 
-beforeEach(async () => {
+beforeEach(() => {
   vi.resetModules()
   page = {}
   scripts = []
@@ -20,46 +20,51 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals())
 
 const load = () => import('./analytics')
-const sent = () => (page.dataLayer ?? []).map((a) => Array.from(a))
-const events = () => sent().filter((a) => a[0] === 'event')
+// Tag Manager reads two kinds of entries: `gtag(...)` calls (arguments objects) and plain objects.
+const layer = () => (page.dataLayer ?? []).map((e) => (typeof (e as Iterable<unknown>)[Symbol.iterator] === 'function' ? Array.from(e as Iterable<unknown>) : e))
+const events = () => layer().filter((e): e is { event: string } => typeof e === 'object' && !Array.isArray(e) && 'event' in (e as object) && (e as { event: string }).event !== 'gtm.js')
+const consent = () => layer().filter((e) => Array.isArray(e) && e[0] === 'consent')
 
 describe('analytics', () => {
   it('does nothing until a parent turns it on', async () => {
     const { track } = await load()
     track('log_entry', { kind: 'feed' })
     expect(scripts).toEqual([])
-    expect(sent()).toEqual([])
+    expect(layer()).toEqual([])
   })
 
-  it('loads Google\'s tag once, only after it is turned on', async () => {
+  it('loads Tag Manager once, only after it is turned on', async () => {
     const { setAnalytics } = await load()
     setAnalytics(true)
     setAnalytics(true)
     expect(scripts).toHaveLength(1)
-    expect(scripts[0].src).toBe('https://www.googletagmanager.com/gtag/js?id=G-MEV4FXM7CK')
+    expect(scripts[0].src).toBe('https://www.googletagmanager.com/gtm.js?id=GTM-P2BQ7L9N')
+    expect(layer().some((e) => (e as { event?: string }).event === 'gtm.js')).toBe(true)
   })
 
-  it('keeps ads and the address query out of what is sent', async () => {
+  it('sets consent before the container runs: measurement only, no ads', async () => {
     const { setAnalytics } = await load()
     setAnalytics(true)
-    const config = sent().find((a) => a[0] === 'config')
-    expect(config?.[1]).toBe('G-MEV4FXM7CK')
-    expect(config?.[2]).toMatchObject({ send_page_view: false, allow_google_signals: false, page_location: 'https://app.example/' })
-    expect(JSON.stringify(sent())).not.toContain('ABC-123')
-    expect(sent().find((a) => a[0] === 'consent')?.[2]).toMatchObject({ analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied' })
+    expect(consent()[0]).toEqual(['consent', 'default', { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' }])
+    const firstConsent = layer().findIndex((e) => Array.isArray(e) && e[0] === 'consent')
+    const start = layer().findIndex((e) => (e as { event?: string }).event === 'gtm.js')
+    expect(firstConsent).toBeLessThan(start)
+  })
+
+  it('hands the container the page address without its query, never the real one', async () => {
+    const { setAnalytics } = await load()
+    setAnalytics(true)
+    expect(layer()).toContainEqual({ cleanLocation: 'https://app.example/' })
+    expect(JSON.stringify(layer())).not.toContain('ABC-123')
   })
 
   it('sends listed events with listed labels', async () => {
     const { setAnalytics, track } = await load()
     setAnalytics(true)
-    track('screen_view', { screen: 'timeline' })
+    track('screen_opened', { screen: 'timeline' })
     track('log_entry', { kind: 'diaper' })
     track('invite_shared')
-    expect(events()).toEqual([
-      ['event', 'screen_view', { screen: 'timeline' }],
-      ['event', 'log_entry', { kind: 'diaper' }],
-      ['event', 'invite_shared', {}],
-    ])
+    expect(events()).toEqual([{ event: 'screen_opened', screen: 'timeline' }, { event: 'log_entry', kind: 'diaper' }, { event: 'invite_shared' }])
   })
 
   it('drops anything that is not on the list, so free text can never leave the phone', async () => {
@@ -67,19 +72,22 @@ describe('analytics', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     setAnalytics(true)
     ;(track as (n: string, p?: Record<string, string>) => void)('anything_else', { kind: 'feed' })
+    ;(track as (n: string, p?: Record<string, string>) => void)('gtm.js')
     track('log_entry', { kind: 'Lily had 4oz at 3pm' as never })
     track('log_entry', { note: 'bath' } as never)
     expect(events()).toEqual([])
   })
 
-  it('stops sending when turned off, and does not load the tag twice when turned back on', async () => {
+  it('tells Google to stop when turned off, and does not load the container twice when turned back on', async () => {
     const { setAnalytics, track } = await load()
     setAnalytics(true)
     setAnalytics(false)
+    expect(consent().at(-1)).toEqual(['consent', 'update', { analytics_storage: 'denied' }])
     expect(page['ga-disable-G-MEV4FXM7CK']).toBe(true)
     track('log_entry', { kind: 'feed' })
     expect(events()).toEqual([])
     setAnalytics(true)
+    expect(consent().at(-1)).toEqual(['consent', 'update', { analytics_storage: 'granted' }])
     expect(page['ga-disable-G-MEV4FXM7CK']).toBe(false)
     expect(scripts).toHaveLength(1)
     track('log_entry', { kind: 'feed' })
