@@ -37,6 +37,7 @@ import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
 import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
+import { shareText } from './share'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
@@ -375,12 +376,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   }
 
   async function share(title: string, body: string) {
-    if (navigator.share) {
-      await navigator.share({ title, text: body }).catch(() => {})
-    } else {
-      await navigator.clipboard?.writeText(body)
-      setToast({ text: 'Copied to clipboard' })
-    }
+    if ((await shareText(title, body)) === 'copied') setToast({ text: 'Copied to clipboard' })
   }
 
   function setSetting(key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) {

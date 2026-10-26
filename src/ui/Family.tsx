@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { callBackend } from '../agents/remote'
+import { inviteMessage } from '../domain/invite'
+import { shareText } from '../share'
 import { useAccount } from './accountContext'
 import { Badge } from './controls'
+import { ShareIcon } from './icons'
 import type { SyncStatus } from './useSync'
 
 const Info = z.object({
@@ -36,6 +39,7 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
   const [preview, setPreview] = useState<{ code: string; ownerName: string }>()
   const [confirm, setConfirm] = useState<string>()
   const [message, setMessage] = useState<string>()
+  const [note, setNote] = useState<string>()
   const [busy, setBusy] = useState(false)
 
   // Bumping this asks the effect below to fetch the household again.
@@ -74,10 +78,20 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
     }
   }
 
+  const sendInvite = async (made: z.infer<typeof Invite>) => {
+    const result = await shareText('Join my family on Calendaby', inviteMessage(made.code, made.expiresAt, asName))
+    if (result === 'copied') setNote('Invite copied. Paste it into a message.')
+  }
+
   const makeInvite = () =>
     act(async () => {
-      setInvite(Invite.parse(await callBackend('createInvite', {})))
+      const made = Invite.parse(await callBackend('createInvite', {}))
+      setInvite(made)
+      setNote(undefined)
+      await sendInvite(made)
     })
+
+  const shareAgain = () => act(() => (invite ? sendInvite(invite) : Promise.resolve()))
 
   const lookUp = () =>
     act(async () => {
@@ -145,16 +159,22 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
       {owner && (
         <div className="stack">
           <button type="button" className="pill quiet" disabled={busy} onClick={() => void makeInvite()}>
-            Invite someone
+            <ShareIcon width={18} height={18} /> Invite someone
           </button>
           {invite && (
-            <p>
-              Give them this code: <b className="invite-code">{invite.code}</b>
-              <br />
-              <small className="muted">
-                Works once, until {new Date(invite.expiresAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
-              </small>
-            </p>
+            <>
+              <p>
+                Code: <b className="invite-code">{invite.code}</b>
+                <br />
+                <small className="muted">
+                  Works once, until {new Date(invite.expiresAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+                </small>
+              </p>
+              <button type="button" className="pill quiet" disabled={busy} onClick={() => void shareAgain()}>
+                <ShareIcon width={18} height={18} /> Share again
+              </button>
+              {note && <small className="muted">{note}</small>}
+            </>
           )}
         </div>
       )}
