@@ -39,6 +39,8 @@ interface Props {
   notifAccess: NotificationAccess
   onSetting: (key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) => void
   onUnit: (u: Unit) => void
+  analytics: boolean
+  onToggleAnalytics: () => void
   onToggleReminders: () => void
   onTestReminder: () => void
   onHandoff: () => void
@@ -96,6 +98,22 @@ export function Profile(p: Readonly<Props>) {
             <ShareIcon width={18} height={18} /> Hand off to the next caregiver
           </button>
         )}
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h3>Help improve Calendaby</h3>
+          <Badge tone={p.analytics ? 'sage' : 'oat'}>{p.analytics ? 'On' : 'Off'}</Badge>
+        </div>
+        <p className="muted">
+          Share which screens are opened and what kinds of entries are logged, so we know what to improve. Nothing about {p.baby} or your
+          family is sent: no names, dates, amounts, notes or invite codes. Uses Google Analytics, and you can turn it off at any time.
+        </p>
+        <div className="card-foot">
+          <button type="button" className={p.analytics ? 'pill quiet' : 'pill primary'} onClick={p.onToggleAnalytics}>
+            {p.analytics ? 'Turn off sharing' : 'Share anonymous usage'}
+          </button>
+        </div>
       </section>
 
       <section className="card">

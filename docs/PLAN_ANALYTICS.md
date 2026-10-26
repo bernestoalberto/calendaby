@@ -1,24 +1,25 @@
-# Plan: product analytics with Firebase
+# Plan: product analytics with Google Analytics 4
 
-Goal: learn which parts of Calendaby are used (screens, logging, sharing, installs) without ever sending anything about the baby or the family.
+Goal: learn which parts of Calendaby are used (screens, logging, sharing) without ever sending anything about the baby or the family.
 
 ## Decisions
 
-- **One plugin for every platform: `@capacitor-firebase/analytics`.** Apache-2.0, about 160 KB, updated September 2026, works on the web, Android and iOS from one call. Peer dependency: `firebase` 12 or newer. Alternative rejected: the raw Android SDK, which would leave the web app (the main way Carolina uses it) uncovered.
-- **Off until the parent turns it on.** A baby log is sensitive, so collection starts disabled and a switch in Profile > Privacy enables it. The choice is stored on the phone (`settings`, key `analytics`) and is read before any event is sent. Changing it takes effect immediately. If the owner prefers on-by-default with an opt-out, that is a one-line change, but it needs the privacy notice first.
-- **Only what the owner would be comfortable seeing in a report.** Events carry a name and a few fixed labels, never free text. Allowed: screen opened (`today`, `timeline`...), kind of entry logged (`feed`, `diaper`...), invite shared, family joined, install, update applied. Never sent: baby name, birth date, notes, amounts, times of day, caregiver names, emails, invite codes, anything typed or spoken.
-- **A fixed list in code, checked before sending.** `src/analytics.ts` accepts only event names from one list and parameters from fixed values; anything else is dropped and logged to the console (rule 4). No user id is set, so events are not tied to an account.
-- **Configuration, not secrets, in the app.** The Firebase web config (`VITE_FIREBASE_*`) goes in `.env.local` and in the Vercel project settings, documented in `.env.example`. `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) are downloaded from the Firebase console, kept out of git and listed in `.gitignore`.
-- **No analytics in tests.** Vitest and Playwright use a stand-in that records events (rule 3).
+- **The Google Analytics 4 tag (`gtag.js`), not Firebase.** The owner supplied a GA4 measurement ID. One tag works in the browser and inside the Android and iOS apps (their web view loads it like a page), so there is no new npm package, no `google-services.json` and no `GoogleService-Info.plist`. Firebase (`@capacitor-firebase/analytics`, Apache-2.0, needs `firebase` 12+) stays an option if native-only measurement is ever wanted; it would also bring push notifications.
+- **Never pasted into `index.html`.** A tag in the page loads for everyone before any choice and records the full address, and an invite link carries a code in its query. `src/analytics.ts` loads the tag only after opt-in and sends `page_location` without the query.
+- **Off until the parent turns it on.** Profile > Help improve Calendaby. The choice is the on-device setting `analytics` (`'on'` or `'off'`, absent means off), the same pattern as the reminders switch. Turning it off sets Google's `ga-disable-<id>` flag at once, so nothing more is sent.
+- **Measurement only.** Consent mode: analytics storage granted, ad storage, ad user data and ad personalisation denied; Google signals and ad personalisation signals off; no automatic page views.
+- **A fixed list, checked before sending.** Events and labels are in one table in `src/analytics.ts`: `screen_view` (`screen`), `log_entry` (`kind`) and `invite_shared`. Anything not on the list is dropped with a console warning, so free text, names, dates, amounts and codes cannot leave the phone. No user id is set.
+- **The measurement ID is in code.** It is a public identifier (visible in any page source), not a secret.
+- **Tests never call Google.** Unit tests stub the page; the browser tests answer Google's address with an empty script.
 
-## Phases
+## Done
 
-1. **Switch and gate.** The setting, the Profile > Privacy switch and `src/analytics.ts` with the allowed list and a no-op when off. Done when: with the switch off nothing is called; with it on only listed events pass; a test shows free text and unknown names are dropped.
-2. **Web.** Add the plugin and `firebase`, initialise from `VITE_FIREBASE_*`, log screen opens. Done when the Firebase DebugView shows `screen_view` from the browser and nothing when the switch is off.
-3. **Android and iOS.** `google-services.json` and `GoogleService-Info.plist` in place, `npm run cap:sync`. Done when DebugView shows events from a phone.
-4. **Events.** Entry kind logged, invite shared, family joined, install prompt accepted. Done when each appears once per action and carries no free text.
+- The switch, the stored choice, the allowed-event table and the loader (`src/analytics.ts`, 6 unit tests).
+- Screen opened (name only), kind of entry logged (feed, sleep, diaper, med, note, activity, pump) and invite shared.
+- Browser tests (`e2e/analytics.spec.ts`): no request to Google before opt-in; one request after; the disable flag follows the switch; the choice survives a reload.
 
-## Needed from the owner before phase 2
+## Still to do
 
-- A Firebase project with a Web app, an Android app (package name from `android/app/build.gradle`) and an iOS app, and the config values.
-- Confirmation of off-until-enabled, and a short privacy notice wording before this ships publicly. Google Analytics collects device and usage data by itself, so the notice must say so.
+- Check the events in Google Analytics (Admin > DebugView, or Realtime) from the browser and from a phone. The tag has not been tried against the real Google service or inside the Android and iOS apps.
+- A privacy notice before a public release. Google Analytics collects device and usage data by itself (browser, rough location, language), and the app says so only briefly in Profile.
+- Possible later events: family joined, install prompt accepted, update applied.

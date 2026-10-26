@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { setAnalytics, track } from './analytics'
 import { parseLog } from './agents/capture'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
@@ -104,6 +105,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
+  // Off until a parent turns it on; the choice is kept on the phone like the reminders switch.
+  const [shareUsage, setShareUsage] = useState(false)
   const [briefingTime, setBriefingTime] = useState(() => store.setting('briefingTime') ?? DEFAULT_SETTINGS.briefingTime)
   const [ageNorms, setAgeNorms] = useState<AgeNorm[]>([])
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
@@ -111,6 +114,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   // An invite link opens the join box with its code filled in; the code is forgotten once the person leaves Profile.
   const [joinCode, setJoinCode] = useState(peekPendingJoin)
   const [tab, setTab] = useState<Tab>(joinCode ? 'profile' : 'today')
+  // Only the name of the screen, and only once a parent has turned sharing on (track does nothing otherwise).
+  useEffect(() => track('screen_view', { screen: tab }), [tab])
   useEffect(() => {
     if (tab === 'profile' || joinCode === undefined) return
     forgetPendingJoin()
@@ -165,6 +170,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
+    void store.getSetting('analytics').then((v) => {
+      setShareUsage(v === 'on')
+      setAnalytics(v === 'on')
+    })
     void store.listAgeNorms().then(setAgeNorms)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
@@ -323,6 +332,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     for (const d of drafts) {
       try {
         added.push(await store.append(d, caregiver))
+        track('log_entry', { kind: d.kind })
       } catch (err) {
         problems.push(err instanceof DuplicateEventError ? err.message : `Couldn't save a ${d.kind}`)
       }
@@ -480,6 +490,14 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   function changeUnit(u: Unit) {
     setUnit(u)
     void store.setSetting('unit', u)
+  }
+
+  async function toggleAnalytics() {
+    const next = !shareUsage
+    setAnalytics(next)
+    setShareUsage(next)
+    await store.setSetting('analytics', next ? 'on' : 'off')
+    setToast({ text: next ? 'Thanks. Anonymous usage is shared.' : 'Usage sharing turned off' })
   }
 
   async function toggleReminders() {
@@ -705,6 +723,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onMembership={() => void sync.now()}
             joinCode={joinCode}
             persistent={store.persistent}
+            analytics={shareUsage}
+            onToggleAnalytics={() => void toggleAnalytics()}
             reminders={reminders}
             briefingTime={briefingTime}
             notifAccess={notifAccess}

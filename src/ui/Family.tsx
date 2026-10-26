@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { callBackend } from '../agents/remote'
+import { track } from '../analytics'
 import { inviteMessage } from '../domain/invite'
 import { shareText } from '../share'
 import { useAccount } from './accountContext'
@@ -85,6 +86,7 @@ export function Family({ caregiver, status, onSyncNow, onMembership, joinCode }:
 
   const sendInvite = async (made: z.infer<typeof Invite>) => {
     const result = await shareText('Join my family on Calendaby', inviteMessage(made.code, made.expiresAt, asName))
+    if (result !== 'cancelled') track('invite_shared')
     if (result === 'copied') setNote('Invite copied. Paste it into a message.')
   }
 
