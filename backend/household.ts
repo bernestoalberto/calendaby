@@ -127,7 +127,8 @@ async function migrate(db: Client): Promise<void> {
   }
 }
 
-const hashCode = (code: string) => createHash('sha256').update(code.trim().toUpperCase().replaceAll('-', '')).digest('hex')
+// Phones and messaging apps swap the hyphen for an en dash, a non-breaking hyphen or a space, so only letters and digits count.
+const hashCode = (code: string) => createHash('sha256').update(code.toUpperCase().replaceAll(/[^A-Z0-9]/g, '')).digest('hex')
 
 function newCode(): string {
   const chars = Array.from({ length: 6 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)])

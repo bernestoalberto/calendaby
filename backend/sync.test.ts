@@ -129,6 +129,29 @@ describe('two phones, two accounts, one household', () => {
     expect(await idOf(callAs('tok_gran'))).not.toBe(await idOf(mom))
   })
 
+  it('makes whoever joins with a code a member under the owner, who alone can invite', async () => {
+    const mom = callAs('tok_mom')
+    const dad = callAs('tok_dad')
+    await join(mom, dad, 'Dad')
+    type Info = { role: string; members: { name: string; role: string; you: boolean }[] }
+    const seenByDad = (await dad('householdInfo', {})) as Info
+    expect(seenByDad.role).toBe('member')
+    expect(seenByDad.members.map((m) => [m.name, m.role])).toEqual([['Mom', 'owner'], ['Dad', 'member']])
+    await expect(dad('createInvite', {})).rejects.toThrow('Only the owner can invite')
+    await expect(dad('removeMember', { userId: 'user_mom' })).rejects.toThrow('Only the owner can remove')
+    expect(((await mom('householdInfo', {})) as Info).role).toBe('owner')
+  })
+
+  it('accepts a code however a phone or messaging app rewrote it', async () => {
+    const mom = callAs('tok_mom')
+    await mom('householdInfo', { name: 'Mom' })
+    const { code } = (await mom('createInvite', {})) as { code: string }
+    const [a, b] = code.split('-')
+    for (const typed of [`${a}–${b}`, `${a}—${b}`, `${a} ${b}`, `${a}${b}`.toLowerCase(), ` ${a}‑${b}\n`]) {
+      expect(await callAs('tok_dad')('previewInvite', { code: typed })).toEqual({ ownerName: 'Mom' })
+    }
+  })
+
   it('keeps an uninvited account out', async () => {
     const mom = await phone()
     const gran = await phone()
