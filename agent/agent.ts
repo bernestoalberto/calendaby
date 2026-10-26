@@ -56,6 +56,12 @@ Deduce patterns from the baby's own history (wake windows, nap lengths, feeding 
 For "when will" or "when is the next" questions, use getOutlook and state only the times and ranges it returns, with their basis.
 For general baby-care questions (sleep, feeding, solids, diapers, development, checkups, warning signs), use pediatric_guide.
 Be brief and kind.
+Format every answer for a small phone screen, in plain text with only this markup:
+- Start with the answer in one or two sentences, with the key time or amount in **bold**.
+- If more is needed, add at most 4 short bullet points, each on its own line starting with "- ".
+- Use numbered steps ("1. ") only for things to do in order.
+- No tables, no headings and no emoji. Write times the way the parent sees them, like 2:10 PM, and amounts with their unit.
+- Give a source once, as a link like [CDC](https://...), never as a long block.
 If the parent tells you something that happened, log it with record_events.
 ${google ? GOOGLE_HINT : ''}${GUIDE_RULES}${SAFETY}`
 

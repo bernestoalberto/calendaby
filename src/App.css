@@ -1861,6 +1861,46 @@ button.insight-row {
   color: var(--muted);
 }
 
+/* The agent's reply is drawn as paragraphs and lists, so the bubble itself must not keep every line break. */
+.bubble.agent:has(.reply) {
+  white-space: normal;
+}
+
+.reply p {
+  margin: 0 0 8px;
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+.reply ul,
+.reply ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.reply ul {
+  list-style: disc;
+}
+
+.reply ol {
+  list-style: decimal;
+}
+
+.reply li {
+  margin: 0 0 4px;
+  line-height: 1.45;
+}
+
+.reply > :last-child {
+  margin-bottom: 0;
+}
+
+.reply a {
+  color: var(--primary-2);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
 .agent-intro p {
   margin: 0 0 12px;
   font-size: 14px;

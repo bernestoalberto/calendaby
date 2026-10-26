@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSpeech } from '../useSpeech'
 import { Badge } from './controls'
 import { CheckIcon, MicIcon, SendIcon, SparkIcon } from './icons'
+import { Reply } from './Reply'
 
 export type Chat = { role: 'you' | 'agent'; text: string; logged?: string[] }
 
@@ -68,7 +69,7 @@ export function Agent({ baby, chat, busy, online, onSend }: Readonly<Props>) {
       <ol className="chat">
         {chat.map((m) => (
           <li key={`${m.role}:${m.text}`} className={`bubble ${m.role}`}>
-            {m.text}
+            {m.role === 'agent' ? <Reply text={m.text} /> : m.text}
             {m.logged && m.logged.length > 0 && (
               <span className="logged">
                 {m.logged.map((l) => (
