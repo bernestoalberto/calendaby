@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BabyEvent } from '../src/domain/events.js'
 import { openShared, type SharedStore } from './household.js'
 
@@ -177,6 +177,28 @@ describe('households and invites', () => {
     await expect(store.leave('user_a')).rejects.toMatchObject({ problem: 'owner_leaving' })
     await store.leave('user_b')
     expect(await store.householdOf('user_b')).toBeUndefined()
+  })
+
+  it('writes the reason a code was refused to the server log, never the code itself', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const refused = () => warn.mock.calls.at(-1)
+
+    await expect(store.previewInvite('user_b', 'ZZZ-ZZZ')).rejects.toMatchObject({ problem: 'invalid' })
+    expect(refused()).toEqual(['invite refused', { reason: 'no such code', user: 'user_b' }])
+
+    const used = await store.createInvite(A, 'user_a')
+    await store.redeemInvite('user_b', used.code)
+    await expect(store.previewInvite('user_c', used.code)).rejects.toMatchObject({ problem: 'invalid' })
+    expect(refused()).toEqual(['invite refused', { reason: 'already used', user: 'user_c' }])
+
+    const old = await store.createInvite(A, 'user_a')
+    clock += 49 * 3_600_000
+    await expect(store.previewInvite('user_c', old.code)).rejects.toMatchObject({ problem: 'invalid' })
+    expect(refused()).toEqual(['invite refused', { reason: 'expired', user: 'user_c' }])
+
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(used.code)
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(old.code)
+    warn.mockRestore()
   })
 
   it('moves someone who already shares a household with others when they accept a code', async () => {

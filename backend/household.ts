@@ -74,6 +74,7 @@ const TRY_WINDOW_MS = 10 * 60_000
 // No 0/O/1/I/L, so a code read aloud or typed from a screenshot survives.
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
+const INVITE_STATE_SQL = 'SELECT used_at FROM invite WHERE code_hash = ?'
 const RENAME_MEMBER_SQL = 'UPDATE member SET name = ? WHERE user_id = ? AND name <> ?'
 // If the one who moved was the old family's owner, the longest-standing member takes over; otherwise nothing changes.
 const PROMOTE_SUCCESSOR_SQL = `UPDATE member SET role = 'owner'
@@ -205,6 +206,12 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
     }
   }
 
+  async function refusalReason(code: string): Promise<'no such code' | 'already used' | 'expired'> {
+    const { rows } = await db.execute({ sql: INVITE_STATE_SQL, args: [hashCode(code)] })
+    if (!rows[0]) return 'no such code'
+    return rows[0].used_at === null ? 'expired' : 'already used'
+  }
+
   async function findInvite(userId: string, code: string) {
     await guard(userId)
     const { rows } = await db.execute({
@@ -213,6 +220,8 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
     })
     if (!rows[0]) {
       await db.execute({ sql: 'INSERT INTO failed_try (user_id, at) VALUES (?, ?)', args: [userId, now()] })
+      // The parent only sees one vague message on purpose; the reason goes to the server log, without the code.
+      console.warn('invite refused', { reason: await refusalReason(code), user: userId.slice(-6) })
       throw new HouseholdError('invalid', 'That code did not work. Ask for a new one.')
     }
     return String(rows[0].household_id)
