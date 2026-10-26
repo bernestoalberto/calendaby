@@ -120,6 +120,15 @@ describe('two phones, two accounts, one household', () => {
     expect(unnamed.members[0].name).toBe('Ernesto')
   })
 
+  it('shows a short family id that matches for members and differs between families', async () => {
+    const mom = callAs('tok_mom')
+    await join(mom, callAs('tok_dad'), 'Dad')
+    const idOf = async (call: Call) => ((await call('householdInfo', {})) as { familyId: string }).familyId
+    expect(await idOf(mom)).toMatch(/^[0-9a-f]{6}$/)
+    expect(await idOf(callAs('tok_dad'))).toBe(await idOf(mom))
+    expect(await idOf(callAs('tok_gran'))).not.toBe(await idOf(mom))
+  })
+
   it('keeps an uninvited account out', async () => {
     const mom = await phone()
     const gran = await phone()

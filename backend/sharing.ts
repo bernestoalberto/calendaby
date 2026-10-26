@@ -65,6 +65,8 @@ export function mountSharing(app: Hono<Env>, provider: SharedProvider) {
   route('householdInfo', z.strictObject({ name: Name.optional() }), async ({ store, userId, householdId }) => {
     const members = await store.members(householdId)
     return {
+      // Enough to see on two screens that they are the same family; never enough to act on one.
+      familyId: householdId.slice(0, 6),
       role: members.find((m) => m.userId === userId)?.role ?? 'member',
       members: members.map((m) => ({ userId: m.userId, name: m.name, role: m.role, you: m.userId === userId })),
     }

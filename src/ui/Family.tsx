@@ -9,6 +9,7 @@ import { ShareIcon } from './icons'
 import type { SyncStatus } from './useSync'
 
 const Info = z.object({
+  familyId: z.string().optional(),
   role: z.enum(['owner', 'member']),
   members: z.array(z.object({ userId: z.string(), name: z.string(), role: z.enum(['owner', 'member']), you: z.boolean() })),
 })
@@ -210,6 +211,7 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
         <button type="button" className="link" disabled={status.state === 'syncing'} onClick={onSyncNow}>
           Sync now
         </button>
+        {info?.familyId && <small className="muted">Family ID {info.familyId}</small>}
       </div>
     </section>
   )
