@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
@@ -11,6 +11,8 @@ import { DEFAULT_SETTINGS, type ListId } from './domain/options'
 import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
+import { newProposals, proposalAlert } from './domain/newProposals'
+import { visitPrep, type VisitPrep } from './domain/visitPrep'
 import { outlook } from './domain/outlook'
 import { normFor, type AgeNorm } from './domain/ageNorms'
 import { nextCheckups, weeksOld } from './knowledge/index'
@@ -21,6 +23,7 @@ import { sleepSessions, summarizeDay } from './domain/summary'
 import { DEFAULT_THEME, parseTheme, type Theme } from './domain/theme'
 import {
   notificationAccess,
+  notifyNow,
   requestNotificationAccess,
   sendTestNotification,
   syncNapNotifications,
@@ -61,6 +64,7 @@ const capture = new HybridCaptureAgent()
 const nowMs = () => Date.now()
 type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'calendar' | 'agent' | 'profile'
 const TWO_WEEKS = 14 * 24 * 3_600_000
+const GMAIL_CHECK_MS = 30 * 60_000
 type Toast = { text: string; undo?: BabyEvent[] }
 
 let opened: Promise<SqliteEventStore> | undefined
@@ -114,6 +118,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
   const [calBusy, setCalBusy] = useState(false)
   const [calError, setCalError] = useState<string>()
+  /** Appointment ids this phone has already shown, so only new email finds trigger a notification. */
+  const seenAppointments = useRef<Set<string>>(undefined)
+  const lastGmailCheck = useRef(0)
   /** The settings the whole family shares; another caregiver may have changed them. */
   const loadShared = useCallback(async () => {
     const [name, born, goal] = await Promise.all([store.getSetting('baby'), store.getSetting('birth'), store.getSetting('tummyGoal')])
@@ -151,7 +158,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.listAgeNorms().then(setAgeNorms)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
-      if (parsed.success) setAppointments(parsed.data)
+      if (!parsed.success) return
+      setAppointments(parsed.data)
+      // With no saved list this is a first run: the first list fetched becomes the starting point, so nothing old is announced.
+      if (v) seenAppointments.current = new Set(parsed.data.map((a) => a.id))
     })
     void store.getSetting('nursing').then((v) => v && setTimer(JSON.parse(v) as NursingTimer))
     void notificationAccess().then(setNotifAccess)
@@ -197,12 +207,33 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void syncNapNotifications(active, alerts)
   }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight])
 
+  const prep = useMemo(() => {
+    const out: Record<string, VisitPrep> = {}
+    for (const a of appointments) if (a.status !== 'dismissed') out[a.id] = visitPrep(a, baby, birth || undefined, events, now)
+    return out
+  }, [appointments, baby, birth, events, now])
+
+  /** The newest values for code that runs later (timers, listeners), which would otherwise see old ones. */
+  const latest = useRef({ reminders, notifAccess, baby })
+  latest.current = { reminders, notifAccess, baby }
+
+  /** Stores a fresh appointment list; when the email check found new ones and nobody is looking at the list, says so. */
+  function receiveAppointments(list: Appointment[], announce: boolean) {
+    const found = newProposals(seenAppointments.current, list)
+    seenAppointments.current = new Set(list.map((a) => a.id))
+    setAppointments(list)
+    void store.setSetting('appointments', JSON.stringify(list))
+    const { reminders: on, notifAccess: access, baby: name } = latest.current
+    if (announce && found.length > 0 && on && access === 'granted') {
+      const message = proposalAlert(name, found)
+      void notifyNow(message.title, message.body)
+    }
+  }
+
   async function loadCalendar() {
     const from = nowMs()
     try {
-      const list = await callBackend<Appointment[]>('listAppointments', {})
-      setAppointments(list)
-      void store.setSetting('appointments', JSON.stringify(list))
+      receiveAppointments(await callBackend<Appointment[]>('listAppointments', {}), false)
       setCalEvents(await callBackend<CalendarEvent[]>('listCalendar', { from, to: from + TWO_WEEKS }))
       setCalError(undefined)
     } catch (err) {
@@ -230,14 +261,35 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   useEffect(() => {
     if (account.signedIn && tab === 'calendar') void loadCalendar()
     else if (account.signedIn) void callBackend<Appointment[]>('listAppointments', {}).then(
-      (list) => {
-        setAppointments(list)
-        void store.setSetting('appointments', JSON.stringify(list))
-      },
+      (list) => receiveAppointments(list, true),
       () => undefined,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.signedIn, tab])
+
+  /** Reads Gmail without a tap: when the app opens or returns to the front, at most every 30 minutes. */
+  async function checkGmailQuietly() {
+    if (Date.now() - lastGmailCheck.current < GMAIL_CHECK_MS) return
+    lastGmailCheck.current = Date.now()
+    try {
+      await callBackend('importAppointments', { now: isoWithOffset(new Date(nowMs())) })
+      receiveAppointments(await callBackend<Appointment[]>('listAppointments', {}), tab !== 'calendar')
+    } catch (err) {
+      // Not worth interrupting anyone: the Sync Gmail button on the Calendar tab shows the same error when it matters.
+      console.warn('Gmail check failed', err)
+    }
+  }
+  const quietCheck = useRef(checkGmailQuietly)
+  quietCheck.current = checkGmailQuietly
+
+  useEffect(() => {
+    if (!account.signedIn || !on('calendar')) return
+    const go = () => void quietCheck.current()
+    go()
+    const onVisible = () => document.visibilityState === 'visible' && go()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [account.signedIn, on])
 
   function reload() {
     setEvents(store.list())
@@ -589,6 +641,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             now={now}
             agenda={agenda}
             pending={pending}
+            prep={prep}
             busy={calBusy}
             error={calError}
             onSync={() => void syncGmail()}

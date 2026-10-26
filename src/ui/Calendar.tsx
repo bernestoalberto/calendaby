@@ -1,5 +1,6 @@
 import type { Appointment } from '../domain/appointments'
 import type { AgendaItem } from '../domain/calendar'
+import type { VisitPrep } from '../domain/visitPrep'
 import { Badge } from './controls'
 import { CheckIcon, CloseIcon } from './icons'
 
@@ -8,6 +9,8 @@ interface Props {
   now: number
   agenda: AgendaItem[]
   pending: Appointment[]
+  /** What to expect and the plan for each appointment, by appointment id. */
+  prep: Record<string, VisitPrep>
   busy: boolean
   error?: string
   onSync: () => void
@@ -20,6 +23,30 @@ function when(item: { startsAt?: number; allDay?: boolean }, now: number): strin
   const today = new Date(now).toDateString() === d.toDateString()
   const day = today ? 'Today' : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
   return item.allDay ? day : `${day}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+}
+
+function Prep({ info }: Readonly<{ info: VisitPrep | undefined }>) {
+  if (!info || (info.expect.length === 0 && info.plan.length === 0)) return null
+  return (
+    <details className="prep">
+      <summary>What to expect</summary>
+      {info.expect.map((l) => (
+        <p key={l.text}>
+          {l.text}{' '}
+          <small className="muted">
+            <a href={l.source.url} target="_blank" rel="noreferrer">
+              {l.source.org}
+            </a>
+          </small>
+        </p>
+      ))}
+      {info.plan.map((t) => (
+        <p key={t} className="muted">
+          {t}
+        </p>
+      ))}
+    </details>
+  )
 }
 
 export function Calendar(p: Readonly<Props>) {
@@ -54,6 +81,7 @@ export function Calendar(p: Readonly<Props>) {
                   {when(a, p.now)}
                   {a.provider ? ` • ${a.provider}` : ''}
                 </p>
+                <Prep info={p.prep[a.id]} />
               </div>
               <div>
                 {a.startsAt !== undefined && (
@@ -81,6 +109,7 @@ export function Calendar(p: Readonly<Props>) {
               <b>{i.title}</b>
               <p className="muted">{when(i, p.now)}</p>
               {i.clash && <p className="warning">{i.clash}</p>}
+              {i.source === 'appointment' && <Prep info={p.prep[i.id]} />}
             </div>
             <Badge tone={i.source === 'appointment' ? 'lilac' : 'sage'}>{i.source === 'appointment' ? 'Doctor' : 'Calendar'}</Badge>
           </div>

@@ -162,6 +162,21 @@ main {
   margin-top: 12px;
 }
 
+.prep {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.prep summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.prep p {
+  margin: 6px 0 0;
+}
+
 .section-head {
   display: flex;
   align-items: baseline;

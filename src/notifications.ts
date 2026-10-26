@@ -8,6 +8,7 @@ const CANCEL_IDS = [...ALL_ALERT_IDS, ...Array.from({ length: APPT_ID_COUNT }, (
 export type NotificationAccess = 'granted' | 'denied' | 'prompt' | 'unsupported'
 
 const TEST_ID = 199
+const NOW_ID_BASE = 5000
 const webTimers: ReturnType<typeof setTimeout>[] = []
 
 function mapNativePermission(display: string): NotificationAccess {
@@ -95,6 +96,36 @@ export async function syncNapNotifications(enabled: boolean, alerts: NapAlert[])
       webTimers.push(setTimeout(() => void showWebNotification(a.title, a.body), delay))
     }
   }
+}
+
+/** Shows one notification right away, for news that should not wait for a schedule. False when it could not be shown. */
+export async function notifyNow(title: string, body: string): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { display } = await LocalNotifications.checkPermissions()
+      if (display !== 'granted') return false
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            // Outside the cancelled alert ids, so rescheduling the reminders never removes it.
+            id: NOW_ID_BASE + (Date.now() % 100_000),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 1000), allowWhileIdle: true },
+            isExactNotification: false,
+            foreground: true,
+          },
+        ],
+      })
+      return true
+    } catch (err) {
+      console.warn('Could not show the notification', err)
+      return false
+    }
+  }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
+  await showWebNotification(title, body)
+  return true
 }
 
 export async function sendTestNotification(baby: string): Promise<boolean> {
