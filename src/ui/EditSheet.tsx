@@ -25,6 +25,20 @@ const toMl = (value: string, unit: Unit) => (value.trim() === '' ? undefined : N
 const toInt = (value: string) => (value.trim() === '' ? undefined : Number(value))
 const toDraft = ({ id: _id, loggedBy: _by, ...rest }: BabyEvent) => rest as DraftEvent
 
+function SideSelect({ value, onChange }: Readonly<{ value: string; onChange: (side: string) => void }>) {
+  return (
+    <label className="field">
+      <span className="field-label">Side</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not set</option>
+        <option value="left">Left</option>
+        <option value="right">Right</option>
+        <option value="both">Both</option>
+      </select>
+    </label>
+  )
+}
+
 export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Props>) {
   const [first] = events
   const [times, setTimes] = useState(() => events.map((e) => toLocalInput(e.at)))
@@ -134,15 +148,7 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
             )}
             {method === 'breast' && (
               <>
-                <label className="field">
-                  <span className="field-label">Side</span>
-                  <select value={side} onChange={(e) => setSide(e.target.value)}>
-                    <option value="">Not set</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                    <option value="both">Both</option>
-                  </select>
-                </label>
+                <SideSelect value={side} onChange={setSide} />
                 <label className="field">
                   <span className="field-label">Left minutes</span>
                   <input inputMode="numeric" value={leftMin} onChange={(e) => setLeftMin(e.target.value)} />
@@ -206,15 +212,7 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
               <span className="field-label">Amount ({unit})</span>
               <input inputMode="decimal" value={pumpAmount} onChange={(e) => setPumpAmount(e.target.value)} />
             </label>
-            <label className="field">
-              <span className="field-label">Side</span>
-              <select value={pumpSide} onChange={(e) => setPumpSide(e.target.value)}>
-                <option value="">Not set</option>
-                <option value="left">Left</option>
-                <option value="right">Right</option>
-                <option value="both">Both</option>
-              </select>
-            </label>
+            <SideSelect value={pumpSide} onChange={setPumpSide} />
             <label className="field">
               <span className="field-label">Minutes</span>
               <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />

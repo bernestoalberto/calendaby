@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition as NativeSpeech } from '@capgo/capacitor-speech-recognition'
 import { useEffect, useRef, useState } from 'react'
+import { speechProblem } from './speechErrors'
 
 // The Web Speech API is not in the TS DOM lib; type only what we use.
 interface Recognition {
@@ -8,6 +9,7 @@ interface Recognition {
   interimResults: boolean
   onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
   onend: (() => void) | null
+  onerror: ((e: { error: string }) => void) | null
   start(): void
   stop(): void
 }
@@ -65,7 +67,7 @@ export function useSpeech(onText: (text: string) => void, onProblem?: (message: 
       void startNative()
       return
     }
-    if (!Ctor) return
+    if (!Ctor || listening) return
     const r = new Ctor()
     r.lang = navigator.language || 'en-US'
     r.interimResults = false
@@ -76,10 +78,23 @@ export function useSpeech(onText: (text: string) => void, onProblem?: (message: 
         .trim()
       if (heard) onTextRef.current(heard)
     }
-    r.onend = () => setListening(false)
+    r.onerror = (e) => {
+      const message = speechProblem(e.error)
+      if (message) onProblemRef.current?.(message)
+    }
+    r.onend = () => {
+      rec.current = null
+      setListening(false)
+    }
     rec.current = r
-    r.start()
-    setListening(true)
+    try {
+      r.start()
+      setListening(true)
+    } catch (err) {
+      rec.current = null
+      console.warn('Speech recognition would not start', err)
+      onProblemRef.current?.("Couldn't start the microphone. Try again.")
+    }
   }
 
   function stop() {

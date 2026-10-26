@@ -1,26 +1,6 @@
 import { activityLabel, DEFAULT_ACTIVITY_TYPES, type ActivityType } from '../domain/activities'
 import type { BabyEvent } from '../domain/events'
-import { BottleIcon, BreastIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PillIcon, PumpIcon, SunIcon } from './icons'
 import { formatAmount, type Unit } from './time'
-
-export function eventIcon(e: BabyEvent) {
-  switch (e.kind) {
-    case 'feed':
-      return e.method === 'breast' ? <BreastIcon /> : <BottleIcon />
-    case 'sleep':
-      return e.phase === 'start' ? <MoonIcon /> : <SunIcon />
-    case 'diaper':
-      return <DiaperIcon />
-    case 'med':
-      return <PillIcon />
-    case 'note':
-      return <NoteIcon />
-    case 'activity':
-      return <FaceIcon />
-    case 'pump':
-      return <PumpIcon />
-  }
-}
 
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 

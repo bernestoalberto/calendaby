@@ -99,11 +99,6 @@ export const TodayIcon =(p: IconProps) => (
     <path d="M4 10h16M9 3v4M15 3v4" />
   </Base>
 )
-export const HandoffIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M7 10l-3 3 3 3M4 13h11M17 14l3-3-3-3M20 11H9" />
-  </Base>
-)
 export const SparkIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
@@ -123,17 +118,6 @@ export const PlayIcon = (p: IconProps) => (
 export const StopIcon = (p: IconProps) => (
   <Base {...p} fill="currentColor" stroke="none">
     <rect x="6" y="6" width="12" height="12" rx="2" />
-  </Base>
-)
-export const ChartIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M4 20h16M7 16V9M11 16V5M15 16v-4M19 16V8" />
-  </Base>
-)
-export const HomeIcon = (p: IconProps) => (
-  <Base {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 8v8M8 12h8" />
   </Base>
 )
 export const PauseIcon = (p: IconProps) => (

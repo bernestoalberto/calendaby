@@ -29,6 +29,8 @@ interface Props {
   syncStatus: SyncStatus
   onSyncNow: () => void
   onMembership: () => void
+  /** An invite code from a link, filled into the join box. */
+  joinCode?: string
   theme: Theme
   onTheme: (t: Theme) => void
   persistent: boolean
@@ -79,7 +81,7 @@ export function Profile(p: Readonly<Props>) {
       </section>
 
       {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? <Account /> : null}
-      <Family caregiver={p.caregiver} status={p.syncStatus} onSyncNow={p.onSyncNow} onMembership={p.onMembership} />
+      <Family caregiver={p.caregiver} status={p.syncStatus} onSyncNow={p.onSyncNow} onMembership={p.onMembership} joinCode={p.joinCode} />
 
       <section className="card">
         <div className="card-head">

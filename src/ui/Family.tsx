@@ -22,6 +22,8 @@ interface Props {
   onSyncNow: () => void
   /** Called after joining, leaving or removing someone, so this phone syncs against the right household. */
   onMembership: () => void
+  /** A code from an invite link: it starts in the join box, so the person only has to check and confirm. */
+  joinCode?: string
 }
 
 function statusText(s: SyncStatus): string {
@@ -32,11 +34,11 @@ function statusText(s: SyncStatus): string {
 }
 
 /** Only shown when signed in: the household is tied to the account. */
-export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<Props>) {
+export function Family({ caregiver, status, onSyncNow, onMembership, joinCode }: Readonly<Props>) {
   const { signedIn } = useAccount()
   const [info, setInfo] = useState<z.infer<typeof Info>>()
   const [invite, setInvite] = useState<z.infer<typeof Invite>>()
-  const [typed, setTyped] = useState('')
+  const [typed, setTyped] = useState(joinCode ?? '')
   const [preview, setPreview] = useState<{ code: string; ownerName: string }>()
   const [confirm, setConfirm] = useState<string>()
   const [message, setMessage] = useState<string>()

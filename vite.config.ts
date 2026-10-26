@@ -56,13 +56,17 @@ export default defineConfig({
     react(),
     vercelApi(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' keeps a new version waiting; src/pwa.ts applies it when the app is in the background, never mid-entry.
+      registerType: 'prompt',
       // main.tsx registers it, and only in the browser: the native shells bundle their own files.
       injectRegister: false,
       includeAssets: ['favicon.svg'],
       // Precache the SQLite engine too, so the app opens offline.
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,wasm}'], maximumFileSizeToCacheInBytes: 3_000_000 },
+      // The install screenshots are only shown by the browser's install dialog, so they stay out of the offline cache.
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,wasm}'], globIgnores: ['screenshots/**'], maximumFileSizeToCacheInBytes: 3_000_000 },
       manifest: {
+        // Keeps the app's identity fixed even if start_url changes later.
+        id: '/',
         name: 'Calendaby',
         short_name: 'Calendaby',
         description: 'Baby tracker that logs from one sentence and hands off between caregivers.',
@@ -74,6 +78,15 @@ export default defineConfig({
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        // web+calendaby:join/ABC-123 opens the app on the join box (src/domain/openLink.ts). %s is the whole link.
+        protocol_handlers: [{ protocol: 'web+calendaby', url: '/?open=%s' }],
+        // Made by `npm run screenshots`. Wide ones are for the desktop install dialog, narrow ones for phones.
+        screenshots: [
+          { src: 'screenshots/today-wide.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: 'Today: next nap, last feed and diaper' },
+          { src: 'screenshots/timeline-wide.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: 'Timeline of the day' },
+          { src: 'screenshots/today-narrow.png', sizes: '540x960', type: 'image/png', form_factor: 'narrow', label: 'Today: next nap, last feed and diaper' },
+          { src: 'screenshots/timeline-narrow.png', sizes: '540x960', type: 'image/png', form_factor: 'narrow', label: 'Timeline of the day' },
         ],
       },
     }),

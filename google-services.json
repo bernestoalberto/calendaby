@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "846566429990",
+    "project_id": "calendaby-dd59e",
+    "storage_bucket": "calendaby-dd59e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:846566429990:android:cb80d21444f01f3e74dde7",
+        "android_client_info": {
+          "package_name": "calendaby.ap88"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-F6iO4wLa6qfHR8OhWNgWtgHIs4vFe94"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

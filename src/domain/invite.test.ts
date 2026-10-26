@@ -8,5 +8,7 @@ describe('inviteMessage', () => {
     expect(text).toContain('Dad')
     expect(text).toContain('Profile > Family')
     expect(text).toContain('only works once')
+    // A link opens the join box with the code filled in, so nothing has to be typed.
+    expect(text).toContain('https://calendaby.vercel.app/?join=ABC-123')
   })
 })

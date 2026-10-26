@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseLog } from './agents/capture'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
@@ -40,7 +41,9 @@ import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
 import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
+import { forgetPendingJoin, peekPendingJoin } from './pendingJoin'
 import { shareText } from './share'
+import { describeDay, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
@@ -105,7 +108,14 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [ageNorms, setAgeNorms] = useState<AgeNorm[]>([])
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
-  const [tab, setTab] = useState<Tab>('today')
+  // An invite link opens the join box with its code filled in; the code is forgotten once the person leaves Profile.
+  const [joinCode, setJoinCode] = useState(peekPendingJoin)
+  const [tab, setTab] = useState<Tab>(joinCode ? 'profile' : 'today')
+  useEffect(() => {
+    if (tab === 'profile' || joinCode === undefined) return
+    forgetPendingJoin()
+    setJoinCode(undefined)
+  }, [tab, joinCode])
   const [logTab, setLogTab] = useState<LogTab>('feed')
   const [sheet, setSheet] = useState<'handoff' | null>(null)
   const [text, setText] = useState('')
@@ -341,21 +351,44 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     })
   }
 
-  async function logText() {
-    if (!text.trim()) return
-    const { drafts, unsure } = await capture.capture(text, new Date(nowMs()))
-    const { added, problems } = await logAll(drafts)
+  /** What was logged, what could not be saved and what was not understood, as one line. */
+  function logOutcome(added: BabyEvent[], problems: string[], unsure: string[]): string {
     const parts = [
       added.length ? `Logged ${added.map((e) => eventTitle(e, unit, activityTypes)).join(', ')}` : '',
       ...problems,
       ...unsure.map((u) => `Not logged: "${u}"`),
     ].filter(Boolean)
-    setToast({
-      text: parts.join('. ') || 'Nothing to log',
-      undo: added.length ? added : undefined,
-    })
+    return parts.join('. ') || 'Nothing to log'
+  }
+
+  async function logText() {
+    if (!text.trim()) return
+    const { drafts, unsure } = await capture.capture(text, new Date(nowMs()))
+    const { added, problems } = await logAll(drafts)
+    setToast({ text: logOutcome(added, problems, unsure), undo: added.length ? added : undefined })
     setText(unsure.join(', '))
   }
+
+  /** The browser's own assistant (WebMCP) may log with the offline rules only; the parent sees it and can undo it. */
+  async function logForAssistant(said: string): Promise<string> {
+    const { drafts, unsure } = parseLog(said, new Date(nowMs()))
+    const { added, problems } = await logAll(drafts)
+    const outcome = logOutcome(added, problems, unsure)
+    setToast({ text: `Assistant: ${outcome}`, undo: added.length ? added : undefined })
+    return outcome
+  }
+
+  const assistant = useRef<WebMcpHandlers>(null)
+  assistant.current = { logText: logForAssistant, handoff: () => handoffText(brief), today: () => describeDay(day, baby) }
+  useEffect(
+    () =>
+      registerWebMcpTools({
+        logText: (said) => assistant.current?.logText(said) ?? Promise.resolve('The app is not ready'),
+        handoff: () => assistant.current?.handoff() ?? '',
+        today: () => assistant.current?.today() ?? '',
+      }),
+    [],
+  )
 
   async function undo(list: BabyEvent[]) {
     for (const e of list) await store.remove(e.id)
@@ -670,6 +703,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             syncStatus={sync.status}
             onSyncNow={() => void sync.now()}
             onMembership={() => void sync.now()}
+            joinCode={joinCode}
             persistent={store.persistent}
             reminders={reminders}
             briefingTime={briefingTime}
