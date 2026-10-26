@@ -111,6 +111,15 @@ describe('two phones, two accounts, one household', () => {
     expect(ids(mom)).toEqual(ids(dad))
   })
 
+  it('shows the owner under the name they set later, not the placeholder the household started with', async () => {
+    const mom = callAs('tok_mom')
+    await mom('householdInfo', { name: 'Parent' })
+    const after = (await mom('householdInfo', { name: 'Ernesto' })) as { members: { name: string }[] }
+    expect(after.members.map((m) => m.name)).toEqual(['Ernesto'])
+    const unnamed = (await mom('householdInfo', {})) as { members: { name: string }[] }
+    expect(unnamed.members[0].name).toBe('Ernesto')
+  })
+
   it('keeps an uninvited account out', async () => {
     const mom = await phone()
     const gran = await phone()

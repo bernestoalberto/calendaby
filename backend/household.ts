@@ -165,15 +165,19 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
     }))
   }
 
-  const ensureHousehold = async (userId: string, name = 'Parent') => {
+  const ensureHousehold = async (userId: string, name?: string) => {
     const existing = await householdOf(userId)
-    if (existing) return existing
+    if (existing) {
+      // The household can start before the phone knows the caregiver's name, so a later real name replaces the placeholder.
+      if (name) await db.execute({ sql: 'UPDATE member SET name = ? WHERE user_id = ? AND name <> ?', args: [name, userId, name] })
+      return existing
+    }
     const id = crypto.randomUUID()
     const at = now()
     await db.batch(
       [
         { sql: 'INSERT INTO household (id, created_at) VALUES (?, ?)', args: [id, at] },
-        { sql: "INSERT INTO member (user_id, household_id, role, name, joined_at) VALUES (?, ?, 'owner', ?, ?)", args: [userId, id, name, at] },
+        { sql: "INSERT INTO member (user_id, household_id, role, name, joined_at) VALUES (?, ?, 'owner', ?, ?)", args: [userId, id, name ?? 'Parent', at] },
       ],
       'write',
     )

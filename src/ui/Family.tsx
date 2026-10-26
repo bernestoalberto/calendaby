@@ -46,11 +46,13 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
   const [fresh, setFresh] = useState(0)
   const load = () => setFresh((n) => n + 1)
   const asName = caregiver.trim().slice(0, 40) || 'Parent'
+  // Before the name is known, the server keeps whatever name it has instead of being told "Parent".
+  const named = caregiver.trim().length > 0
 
   useEffect(() => {
     if (!signedIn) return
     let current = true
-    callBackend('householdInfo', { name: asName }).then(
+    callBackend('householdInfo', named ? { name: asName } : {}).then(
       (raw) => {
         if (!current) return
         setInfo(Info.parse(raw))
@@ -61,7 +63,7 @@ export function Family({ caregiver, status, onSyncNow, onMembership }: Readonly<
     return () => {
       current = false
     }
-  }, [signedIn, asName, fresh])
+  }, [signedIn, asName, named, fresh])
 
   if (!signedIn) return null
 
