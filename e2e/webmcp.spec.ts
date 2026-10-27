@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-  await page.waitForFunction(() => Object.keys(window.__tools).length === 3)
+  await page.waitForFunction(() => Object.keys(window.__tools).length === 4)
 })
 
 test('an assistant can log a sentence, and the parent sees it and can undo it', async ({ page }) => {
@@ -38,6 +38,27 @@ test('an assistant can read the handoff and today\'s totals', async ({ page }) =
   await page.evaluate(() => window.__tools.log_baby_event.execute({ text: 'fed 4oz' }))
   expect(await page.evaluate(() => window.__tools.get_today_summary.execute({}))).toContain('Feeds: 1')
   expect(await page.evaluate(() => window.__tools.get_handoff_brief.execute({}))).toMatch(/feed/i)
+})
+
+test('an assistant can ask what is expected next', async ({ page }) => {
+  expect(await page.evaluate(() => window.__tools.get_upcoming_predictions.execute({}))).toMatch(/next|predict/i)
+})
+
+test('the Say it form is a tool, and an assistant-started submit logs and answers it', async ({ page }) => {
+  const form = page.locator('form[toolname="fill_log_box"]')
+  await expect(form).toHaveAttribute('tooldescription', /Say it/)
+  const answer = await page.evaluate(() => {
+    const f = document.querySelector('form[toolname="fill_log_box"]') as HTMLFormElement
+    let reply: Promise<unknown> = Promise.resolve('')
+    const ev = Object.assign(new SubmitEvent('submit', { cancelable: true, bubbles: true }), {
+      agentInvoked: true,
+      respondWith: (p: Promise<unknown>) => void (reply = p),
+    })
+    ;(f.elements.namedItem('text') as HTMLInputElement).value = 'wet diaper'
+    f.dispatchEvent(ev)
+    return reply
+  })
+  expect(answer).toBeTruthy()
 })
 
 test('input that is not a sentence is refused', async ({ page }) => {

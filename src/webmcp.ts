@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { DiaperForecast, FeedForecast, SleepForecast } from './domain/predictions'
 import type { DaySummary } from './domain/summary'
 
 /**
@@ -11,6 +12,7 @@ export interface WebMcpHandlers {
   logText(text: string): Promise<string>
   handoff(): string
   today(): string
+  upcoming(): string
 }
 
 interface Tool {
@@ -28,6 +30,23 @@ interface ModelContext {
 // Whatever an assistant sends is untrusted input, like anything else from outside the app.
 const LogInput = z.strictObject({ text: z.string().trim().min(1).max(500) })
 
+/** The sentence an assistant sent, checked the same way for the imperative tool and the declarative form. */
+export const checkedLogText = (input: unknown): string => LogInput.parse(input).text
+
+/**
+ * The declarative WebMCP API (https://developer.chrome.com/docs/ai/webmcp/declarative-api): these attributes turn the
+ * "Say it" form into a tool. There is no `toolautosubmit`, so the assistant only fills the box and the parent presses Log it.
+ */
+export const SAY_IT_FORM_TOOL = {
+  toolname: 'fill_log_box',
+  tooldescription:
+    'Type one plain sentence into the "Say it" box, such as "fed 4oz", for the parent to check. ' +
+    'Nothing is logged until the parent presses Log it.',
+}
+
+/** A form submit that an assistant started carries `agentInvoked` and lets the page answer it (Chrome only). */
+export type AgentSubmitEvent = SubmitEvent & { agentInvoked?: boolean; respondWith?: (answer: Promise<unknown>) => void }
+
 const NO_INPUT = { type: 'object', properties: {}, additionalProperties: false }
 
 function tools(h: WebMcpHandlers): Tool[] {
@@ -44,7 +63,16 @@ function tools(h: WebMcpHandlers): Tool[] {
         additionalProperties: false,
       },
       annotations: { readOnlyHint: false, consequentialHint: false },
-      execute: async (args) => h.logText(LogInput.parse(args).text),
+      execute: async (args) => h.logText(checkedLogText(args)),
+    },
+    {
+      name: 'get_upcoming_predictions',
+      description:
+        "When the baby's next nap, feed and diaper check are expected, worked out from the last days of the log. " +
+        'These are estimates from the baby\'s own rhythm, not medical advice; a part with too little data is left out.',
+      inputSchema: NO_INPUT,
+      annotations: { readOnlyHint: true },
+      execute: async () => h.upcoming(),
     },
     {
       name: 'get_handoff_brief',
@@ -77,6 +105,19 @@ export function registerWebMcpTools(handlers: WebMcpHandlers): () => void {
     )
   }
   return () => controller.abort()
+}
+
+const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+/** The expected next nap, feed and diaper check as plain text for an assistant. */
+export function describeUpcoming(feed: FeedForecast | undefined, sleep: SleepForecast, diaper: DiaperForecast | undefined, baby: string): string {
+  const lines: string[] = []
+  if (sleep.expectedWakeAt) lines.push(`- Expected to wake around ${clock(sleep.expectedWakeAt)}`)
+  else if (sleep.nap?.nextNapAt) lines.push(`- Next nap around ${clock(sleep.nap.nextNapAt)} (usual awake stretch ${sleep.nap.wakeWindowMin} min)`)
+  if (sleep.usualBedtimeAt) lines.push(`- Usual bedtime around ${clock(sleep.usualBedtimeAt)}`)
+  if (feed) lines.push(`- Next feed around ${clock(feed.nextFeedAt)} (about every ${feed.intervalMin} min)`)
+  if (diaper) lines.push(`- Diaper check around ${clock(diaper.nextCheckAt)}`)
+  return lines.length ? [`${baby} next:`, ...lines].join('\n') : `Not enough log yet to predict what is next for ${baby}.`
 }
 
 /** Today's totals as plain text for an assistant. */

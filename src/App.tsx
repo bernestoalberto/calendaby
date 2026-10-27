@@ -19,7 +19,7 @@ import { outlook } from './domain/outlook'
 import { normFor, type AgeNorm } from './domain/ageNorms'
 import { nextCheckups, weeksOld } from './knowledge/index'
 import { EMPTY_TIMER, type NursingTimer } from './domain/nursing'
-import { feedForecast, sleepForecast } from './domain/predictions'
+import { diaperForecast, feedForecast, sleepForecast } from './domain/predictions'
 import { DuplicateEventError, SqliteEventStore } from './domain/store'
 import { sleepSessions, summarizeDay } from './domain/summary'
 import { DEFAULT_THEME, parseTheme, type Theme } from './domain/theme'
@@ -46,7 +46,7 @@ import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { forgetPendingJoin, peekPendingJoin } from './pendingJoin'
 import { shareText } from './share'
-import { describeDay, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
+import { describeDay, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
@@ -391,13 +391,20 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   }
 
   const assistant = useRef<WebMcpHandlers>(null)
-  assistant.current = { logText: logForAssistant, handoff: () => handoffText(brief), today: () => describeDay(day, baby) }
+  assistant.current = {
+    logText: logForAssistant,
+    handoff: () => handoffText(brief),
+    today: () => describeDay(day, baby),
+    upcoming: () =>
+      describeUpcoming(feedForecast(events, nowMs()), sleepForecast(events, nowMs()), diaperForecast(events, nowMs()), baby),
+  }
   useEffect(
     () =>
       registerWebMcpTools({
         logText: (said) => assistant.current?.logText(said) ?? Promise.resolve('The app is not ready'),
         handoff: () => assistant.current?.handoff() ?? '',
         today: () => assistant.current?.today() ?? '',
+        upcoming: () => assistant.current?.upcoming() ?? '',
       }),
     [],
   )
@@ -640,6 +647,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             text={text}
             onText={setText}
             onSubmitText={() => void logText()}
+            onAssistantText={logForAssistant}
             speech={speech}
             onToggleSleep={toggleSleep}
             onQuick={openLog}

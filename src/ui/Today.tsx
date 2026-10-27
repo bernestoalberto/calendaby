@@ -6,6 +6,7 @@ import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import type { HandoffBrief } from '../agents/handoff'
+import { checkedLogText, SAY_IT_FORM_TOOL, type AgentSubmitEvent } from '../webmcp'
 import { Badge } from './controls'
 import {
   BottleIcon,
@@ -52,6 +53,8 @@ interface Props {
   text: string
   onText: (t: string) => void
   onSubmitText: () => void
+  /** Logs a sentence an assistant filled in through the declarative WebMCP form and says what happened. */
+  onAssistantText: (text: string) => Promise<string>
   speech: { supported: boolean; listening: boolean; start: () => void; stop: () => void }
   onToggleSleep: () => void
   onQuick: (k: QuickKind) => void
@@ -119,13 +122,22 @@ export function Today(p: Props) {
       <form
         className="composer"
         {...composer}
-        onSubmit={(e: FormEvent) => {
+        {...SAY_IT_FORM_TOOL}
+        onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault()
+          const sent = e.nativeEvent as AgentSubmitEvent
+          if (sent.agentInvoked && sent.respondWith) {
+            // The parent pressed Log it after the assistant filled the box; the assistant is told what happened.
+            const outcome = Promise.resolve(new FormData(e.currentTarget).get('text')).then(checkedLogText).then(p.onAssistantText)
+            sent.respondWith(outcome)
+            void outcome.then(() => p.onText(''), () => undefined)
+            return
+          }
           p.onSubmitText()
         }}
       >
         <SparkIcon width={20} height={20} className="composer-spark" />
-        <input value={p.text} onChange={(e) => p.onText(e.target.value)} placeholder="Say it: fed 4oz, she's down" aria-label="Log in your own words" />
+        <input name="text" value={p.text} onChange={(e) => p.onText(e.target.value)} placeholder="Say it: fed 4oz, she's down" aria-label="Log in your own words" />
         {p.speech.supported && (
           <button
             type="button"

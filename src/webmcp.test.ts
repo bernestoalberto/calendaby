@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { describeDay, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
+import { checkedLogText, describeDay, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
 
 interface Registered {
   name: string
@@ -26,6 +26,7 @@ const handlers = (): WebMcpHandlers => ({
   logText: vi.fn(async (text: string) => `Logged: ${text}`),
   handoff: vi.fn(() => 'Awake since 2:10 PM'),
   today: vi.fn(() => '3 feeds'),
+  upcoming: vi.fn(() => 'Next feed around 3:00 PM'),
 })
 
 const withContext = (modelContext: unknown) => vi.stubGlobal('document', { modelContext })
@@ -41,17 +42,52 @@ describe('describeDay', () => {
   })
 })
 
+describe('describeUpcoming', () => {
+  const at = (h: number, m = 0) => new Date(2026, 9, 27, h, m).getTime()
+
+  it('says what is next and leaves out what has too little data', () => {
+    const text = describeUpcoming(
+      { intervalMin: 150, lastFeedAt: at(12), nextFeedAt: at(14, 30) },
+      { nap: { wakeWindowMin: 90, nextNapAt: at(13, 30) } },
+      undefined,
+      'EJ',
+    )
+    expect(text).toContain('EJ next:')
+    expect(text).toContain('Next nap around')
+    expect(text).toContain('about every 150 min')
+    expect(text).not.toContain('Diaper')
+  })
+
+  it('prefers the expected wake time while a nap is open', () => {
+    const text = describeUpcoming(undefined, { expectedWakeAt: at(15), nap: { wakeWindowMin: 90, nextNapAt: at(16) } }, undefined, 'EJ')
+    expect(text).toContain('Expected to wake around')
+    expect(text).not.toContain('Next nap')
+  })
+
+  it('says so when there is nothing to predict yet', () => {
+    expect(describeUpcoming(undefined, {}, undefined, 'EJ')).toBe('Not enough log yet to predict what is next for EJ.')
+  })
+})
+
+describe('checkedLogText', () => {
+  it('trims a sentence and refuses anything else', () => {
+    expect(checkedLogText({ text: ' fed 4oz ' })).toBe('fed 4oz')
+    expect(() => checkedLogText({ text: '' })).toThrow()
+    expect(() => checkedLogText({ text: 5 })).toThrow()
+  })
+})
+
 describe('registerWebMcpTools', () => {
   it('does nothing in a browser without WebMCP', () => {
     withContext(undefined)
     expect(() => registerWebMcpTools(handlers())()).not.toThrow()
   })
 
-  it('offers the three tools with descriptions and object schemas', () => {
+  it('offers the four tools with descriptions and object schemas', () => {
     const ctx = fakeContext()
     withContext(ctx)
     registerWebMcpTools(handlers())
-    expect([...ctx.tools.keys()].sort()).toEqual(['get_handoff_brief', 'get_today_summary', 'log_baby_event'])
+    expect([...ctx.tools.keys()].sort()).toEqual(['get_handoff_brief', 'get_today_summary', 'get_upcoming_predictions', 'log_baby_event'])
     for (const tool of ctx.tools.values()) {
       expect(tool.description.length).toBeGreaterThan(20)
       expect(tool.inputSchema.type).toBe('object')
@@ -63,6 +99,7 @@ describe('registerWebMcpTools', () => {
     withContext(ctx)
     registerWebMcpTools(handlers())
     expect(ctx.tools.get('get_today_summary')?.annotations?.readOnlyHint).toBe(true)
+    expect(ctx.tools.get('get_upcoming_predictions')?.annotations?.readOnlyHint).toBe(true)
     expect(ctx.tools.get('get_handoff_brief')?.annotations).toMatchObject({ readOnlyHint: true, untrustedContentHint: true })
     expect(ctx.tools.get('log_baby_event')?.annotations?.readOnlyHint).toBeFalsy()
   })
@@ -95,6 +132,7 @@ describe('registerWebMcpTools', () => {
     registerWebMcpTools(handlers())
     expect(await ctx.tools.get('get_handoff_brief')?.execute({})).toBe('Awake since 2:10 PM')
     expect(await ctx.tools.get('get_today_summary')?.execute({})).toBe('3 feeds')
+    expect(await ctx.tools.get('get_upcoming_predictions')?.execute({})).toBe('Next feed around 3:00 PM')
   })
 
   it('removes every tool when the app is closed down', () => {
