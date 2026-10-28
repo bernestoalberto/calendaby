@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Log a bottle feed",
+    "messages": [{ "role": "user", "type": "message", "content": "She just finished a 4 oz bottle." }],
+    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "4\\s*(oz|OZ|ounce)" } } }]
+  },
+  {
+    "name": "Log a wet diaper",
+    "messages": [{ "role": "user", "type": "message", "content": "Log that I just changed a wet diaper." }],
+    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "[Ww]et" } } }]
+  },
+  {
+    "name": "Log the start of a nap",
+    "messages": [{ "role": "user", "type": "message", "content": "She just went down for a nap, note it for me." }],
+    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "nap|sleep|asleep|down" } } }]
+  },
+  {
+    "name": "Ask when the next nap is",
+    "messages": [{ "role": "user", "type": "message", "content": "When is the next nap?" }],
+    "expectedCall": [{ "functionName": "get_upcoming_predictions", "arguments": {} }]
+  },
+  {
+    "name": "Ask when the next feed is",
+    "messages": [{ "role": "user", "type": "message", "content": "When should I expect to feed her again?" }],
+    "expectedCall": [{ "functionName": "get_upcoming_predictions", "arguments": {} }]
+  },
+  {
+    "name": "Ask for a handoff to the other parent",
+    "messages": [{ "role": "user", "type": "message", "content": "My wife is taking over in ten minutes. What should I tell her?" }],
+    "expectedCall": [{ "functionName": "get_handoff_brief", "arguments": {} }]
+  },
+  {
+    "name": "Ask for today's totals",
+    "messages": [{ "role": "user", "type": "message", "content": "How many feeds and diapers has she had today?" }],
+    "expectedCall": [{ "functionName": "get_today_summary", "arguments": {} }]
+  },
+  {
+    "name": "Ask how much she slept today",
+    "messages": [{ "role": "user", "type": "message", "content": "How much has she slept so far today?" }],
+    "expectedCall": [{ "functionName": "get_today_summary", "arguments": {} }]
+  }
+]

@@ -18,7 +18,9 @@
     "preview": "vite preview",
     "check": "npm run lint && npm run build && npm test",
     "prepare": "husky",
-    "screenshots": "node scripts/make-screenshots.mjs"
+    "screenshots": "node scripts/make-screenshots.mjs",
+    "evals:webmcp": "npx --yes webmcp-evals@0.0.4 local -t evals/webmcp/schema.json -e evals/webmcp/evals.json",
+    "evals:webmcp:smoke": "npx --yes webmcp-evals@0.0.4 smoke -u http://localhost:5173 -e evals/webmcp/evals.json -v"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.0",
