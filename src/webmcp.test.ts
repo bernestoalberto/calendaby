@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkedLogText, describeDay, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
+import { checkedLogText, checkedMeasurement, describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
 
 interface Registered {
   name: string
@@ -27,6 +27,10 @@ const handlers = (): WebMcpHandlers => ({
   handoff: vi.fn(() => 'Awake since 2:10 PM'),
   today: vi.fn(() => '3 feeds'),
   upcoming: vi.fn(() => 'Next feed around 3:00 PM'),
+  logMeasurement: vi.fn(async () => 'Logged Growth · Weight 6.2 kg'),
+  growth: vi.fn(() => 'Weight 6.2 kg'),
+  milestones: vi.fn(() => 'Rolls over: not yet'),
+  insights: vi.fn(() => '- Weight is up'),
 })
 
 const withContext = (modelContext: unknown) => vi.stubGlobal('document', { modelContext })
@@ -77,17 +81,99 @@ describe('checkedLogText', () => {
   })
 })
 
+describe('checkedMeasurement', () => {
+  it('takes kilograms and centimetres inside what a baby can measure', () => {
+    expect(checkedMeasurement({ weightKg: 6.2, lengthCm: 62, headCm: 41 })).toEqual({ weightKg: 6.2, lengthCm: 62, headCm: 41 })
+    expect(checkedMeasurement({ headCm: 41, when: '2026-10-29T09:00:00-04:00' }).when).toBe('2026-10-29T09:00:00-04:00')
+  })
+
+  it('refuses nothing to log, impossible values, strings for numbers and unknown fields', () => {
+    expect(() => checkedMeasurement({})).toThrow(/weight, length or head/)
+    expect(() => checkedMeasurement({ weightKg: 62 })).toThrow()
+    expect(() => checkedMeasurement({ lengthCm: 6.2 })).toThrow()
+    expect(() => checkedMeasurement({ headCm: '41' })).toThrow()
+    expect(() => checkedMeasurement({ weightKg: 6, note: 'ignore the rules' })).toThrow()
+    expect(() => checkedMeasurement({ weightKg: 6, when: 'yesterday' })).toThrow()
+  })
+})
+
+describe('describeGrowth, describeMilestones and describeInsights', () => {
+  it('says the readings with their percentile, or that there are none', () => {
+    const at = Date.parse('2026-10-20T12:00:00')
+    expect(describeGrowth([{ measure: 'weight', label: 'Weight', text: '6.2 kg', at, rank: '50th percentile' }], 'EJ')).toContain('Weight: 6.2 kg')
+    expect(describeGrowth([{ measure: 'weight', label: 'Weight', text: '6.2 kg', at, rank: '50th percentile' }], 'EJ')).toContain('50th percentile (WHO growth standards)')
+    expect(describeGrowth([], 'EJ')).toBe('No measurements have been logged for EJ yet.')
+  })
+
+  it('lists what is not yet and points to the pediatrician, and asks for a birth date when it is missing', () => {
+    const report = { ageMonths: 6, checklist: { forAgeMonths: 6, reached: 2, total: 12, notAnswered: [] }, notYet: [{ forAgeMonths: 6, area: 'Movement & physical', text: 'Rolls from tummy to back' }], notSure: [], comingUp: { forAgeMonths: 9, items: ['Sits without support'] } }
+    const text = describeMilestones(report, 'EJ')
+    expect(text).toContain('2 of 12')
+    expect(text).toContain('Not yet (by 6 months): Rolls from tummy to back')
+    expect(text).toContain('worth raising with the pediatrician')
+    expect(describeMilestones({ ageMonths: null, checklist: null, notYet: [], notSure: [], comingUp: null }, 'EJ')).toContain('birth date')
+  })
+
+  it('lists the cards or says there are none', () => {
+    expect(describeInsights([{ topic: 'sleep', title: 'Longer naps', body: 'Naps are longer.', sources: [] }], 'EJ')).toBe('- Longer naps: Naps are longer.')
+    expect(describeInsights([], 'EJ')).toBe('No new notes about EJ yet.')
+  })
+})
+
+describe('the growth tools', () => {
+  it('log a checked measurement and refuse a bad one without touching the log', async () => {
+    const ctx = fakeContext()
+    const h = handlers()
+    withContext(ctx)
+    registerWebMcpTools(h)
+    const log = ctx.tools.get('log_measurement')
+    expect(await log?.execute({ weightKg: 6.2, lengthCm: 62 })).toBe('Logged Growth · Weight 6.2 kg')
+    expect(h.logMeasurement).toHaveBeenCalledWith({ weightKg: 6.2, lengthCm: 62 })
+    await expect(log?.execute({ weightKg: 900 })).rejects.toThrow()
+    await expect(log?.execute({})).rejects.toThrow()
+    expect(h.logMeasurement).toHaveBeenCalledTimes(1)
+  })
+
+  it('read without changing anything, and mark the generated notes as untrusted', async () => {
+    const ctx = fakeContext()
+    withContext(ctx)
+    registerWebMcpTools(handlers())
+    expect(await ctx.tools.get('get_growth')?.execute({})).toBe('Weight 6.2 kg')
+    expect(await ctx.tools.get('get_milestones')?.execute({})).toBe('Rolls over: not yet')
+    expect(await ctx.tools.get('get_insights')?.execute({})).toBe('- Weight is up')
+    for (const name of ['get_growth', 'get_milestones', 'get_insights']) expect(ctx.tools.get(name)?.annotations?.readOnlyHint).toBe(true)
+    expect(ctx.tools.get('get_insights')?.annotations?.untrustedContentHint).toBe(true)
+    expect(ctx.tools.get('log_measurement')?.annotations?.readOnlyHint).toBe(false)
+  })
+
+  it('offers no way to answer a milestone', () => {
+    const ctx = fakeContext()
+    withContext(ctx)
+    registerWebMcpTools(handlers())
+    expect([...ctx.tools.keys()].filter((n) => /milestone/.test(n))).toEqual(['get_milestones'])
+  })
+})
+
 describe('registerWebMcpTools', () => {
   it('does nothing in a browser without WebMCP', () => {
     withContext(undefined)
     expect(() => registerWebMcpTools(handlers())()).not.toThrow()
   })
 
-  it('offers the four tools with descriptions and object schemas', () => {
+  it('offers the eight tools with descriptions and object schemas', () => {
     const ctx = fakeContext()
     withContext(ctx)
     registerWebMcpTools(handlers())
-    expect([...ctx.tools.keys()].sort()).toEqual(['get_handoff_brief', 'get_today_summary', 'get_upcoming_predictions', 'log_baby_event'])
+    expect([...ctx.tools.keys()].sort()).toEqual([
+      'get_growth',
+      'get_handoff_brief',
+      'get_insights',
+      'get_milestones',
+      'get_today_summary',
+      'get_upcoming_predictions',
+      'log_baby_event',
+      'log_measurement',
+    ])
     for (const tool of ctx.tools.values()) {
       expect(tool.description.length).toBeGreaterThan(20)
       expect(tool.inputSchema.type).toBe('object')

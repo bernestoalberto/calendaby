@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseLog } from '../agents/capture'
 import { DraftEventSchema, type BabyEvent } from './events'
-import { ageInMonths, bodyUnits, formatMeasure, latest, measureInputText, parseMeasureInput, growthReport, percentile, percentileText, series, type Measure, type MeasureEvent } from './growth'
+import { ageInMonths, bodyUnits, formatMeasure, latest, measureInputText, parseMeasureInput, growthReport, growthTiles, percentile, percentileText, series, type Measure, type MeasureEvent } from './growth'
 import { WHO_GROWTH_REFERENCE, type Sex } from './growthReference'
 
 const now = new Date('2026-10-29T14:00:00')
@@ -147,5 +147,23 @@ describe('growthReport', () => {
 
   it('is empty when nothing was measured', () => {
     expect(growthReport([], 'girl', '2026-02-01', WHO_GROWTH_REFERENCE, day).lines).toEqual([])
+  })
+})
+
+describe('growthTiles', () => {
+  const entry = (id: string, at: string, weightG?: number, lengthMm?: number): MeasureEvent => ({ id, kind: 'measure', at: Date.parse(at), loggedBy: 'a', weightG, lengthMm })
+
+  it('shows the latest reading of each measurement in the chosen unit, with its percentile when it can', () => {
+    const events = [entry('1', '2026-03-01T12:00:00', 4000, 540), entry('2', '2026-04-01T12:00:00', 5600)]
+    const tiles = growthTiles(events, bodyUnits('ml'), 'girl', '2026-02-01', WHO_GROWTH_REFERENCE)
+    expect(tiles.map((t) => [t.label, t.text])).toEqual([['Weight', '5.6 kg'], ['Length', '54 cm']])
+    expect(tiles[0].rank).toMatch(/percentile$/)
+    const noSex = growthTiles(events, bodyUnits('oz'), undefined, undefined, WHO_GROWTH_REFERENCE)[0]
+    expect(noSex.text).toBe('12 lb 6 oz')
+    expect(noSex.rank).toBeUndefined()
+  })
+
+  it('is empty before anything is measured', () => {
+    expect(growthTiles([], bodyUnits('ml'), 'boy', '2026-02-01', WHO_GROWTH_REFERENCE)).toEqual([])
   })
 })

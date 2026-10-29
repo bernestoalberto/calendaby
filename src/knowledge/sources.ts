@@ -68,6 +68,11 @@ export const SOURCES = {
     title: 'Child and Adolescent Immunization Schedule by Age',
     url: 'https://www.cdc.gov/vaccines/hcp/imz-schedules/child-adolescent-age.html',
   },
+  whoGrowth: {
+    org: 'WHO',
+    title: 'Child Growth Standards, birth to 24 months (CDC data files)',
+    url: 'https://www.cdc.gov/growthcharts/who-data-files.htm',
+  },
   aapPeriodicity: {
     org: 'AAP',
     title: 'Bright Futures periodicity schedule (link only)',

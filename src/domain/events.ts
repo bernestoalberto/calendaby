@@ -80,6 +80,18 @@ const NEEDS_VALUE = { message: 'Add a weight, length or head size' }
 
 export const MeasureEvent = MeasureBase.refine(hasValue, NEEDS_VALUE)
 
+/**
+ * A parent's answer about one milestone (see src/knowledge/milestones.ts). The latest answer for an item counts, so changing
+ * your mind is a new entry. `text` is kept so the Timeline can show it without looking the item up.
+ */
+export const MilestoneEvent = z.object({
+  ...base,
+  kind: z.literal('milestone'),
+  milestoneId: z.string().regex(/^\d{1,2}-(social|language|cognitive|movement)-\d{1,2}$/),
+  state: z.enum(['yes', 'not_yet', 'unsure']),
+  text: z.string().min(1).max(240),
+})
+
 export const BabyEvent = z.discriminatedUnion('kind', [
   FeedEvent,
   SleepEvent,
@@ -89,6 +101,7 @@ export const BabyEvent = z.discriminatedUnion('kind', [
   ActivityEvent,
   PumpEvent,
   MeasureEvent,
+  MilestoneEvent,
 ])
 export type BabyEvent = z.infer<typeof BabyEvent>
 export type EventKind = BabyEvent['kind']
@@ -112,4 +125,5 @@ export const DraftEventSchema = z.discriminatedUnion('kind', [
   ActivityEvent.omit(omitStored),
   PumpEvent.omit(omitStored),
   MeasureBase.omit(omitStored).refine(hasValue, NEEDS_VALUE),
+  MilestoneEvent.omit(omitStored),
 ])

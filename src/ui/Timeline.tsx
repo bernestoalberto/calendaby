@@ -3,6 +3,7 @@ import { addDays, startOfDay } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
 import { sleepSessions, summarizeDay } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
+import type { SleepIssue } from '../domain/sleepIssues'
 import { Badge, Segmented } from './controls'
 import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, PumpIcon, RulerIcon, SunIcon, TrashIcon } from './icons'
 import type { ActivityType } from '../domain/activities'
@@ -23,11 +24,14 @@ interface Props {
   baby: string
   activityTypes: ActivityType[]
   on: (feature: string) => boolean
+  /** Problems found in the sleep log; the entries they point to are marked. */
+  issues: SleepIssue[]
   onDelete: (events: BabyEvent[]) => void
   onEdit: (events: BabyEvent[]) => void
 }
 
-export function Timeline({ events, now, unit, baby, activityTypes, on, onDelete, onEdit }: Props) {
+export function Timeline({ events, now, unit, baby, activityTypes, on, issues, onDelete, onEdit }: Props) {
+  const problemFor = (ids: string[]) => issues.find((i) => i.eventIds.some((id) => ids.includes(id)))
   const today = startOfDay(now)
   const [day, setDay] = useState(today)
   const [filter, setFilter] = useState<Filter>('all')
@@ -53,8 +57,10 @@ export function Timeline({ events, now, unit, baby, activityTypes, on, onDelete,
       }
       prevEnd = end
     }
+    const paired = new Set(sleepEvents.filter((e) => sessions.some((s) => s.start === e.at || s.end === e.at)).map((e) => e.id))
     for (const e of events) {
-      if (e.kind === 'sleep' || e.at < day || e.at >= next) continue
+      // A wake-up with no fell-asleep is in no session, so it would be hidden; it is shown so it can be fixed.
+      if ((e.kind === 'sleep' && paired.has(e.id)) || e.at < day || e.at >= next) continue
       out.push({ type: 'event', at: e.at, event: e })
     }
     return out.sort((a, b) => b.at - a.at)
@@ -215,6 +221,7 @@ export function Timeline({ events, now, unit, baby, activityTypes, on, onDelete,
                     </div>
                     <p>{end !== undefined ? `Woke at ${clock(end)}` : `${baby} has been asleep for ${duration(now - i.start)}`}</p>
                     {i.events.find((e) => e.note)?.note && <p className="event-note">{i.events.find((e) => e.note)?.note}</p>}
+                    {problemFor(i.events.map((e) => e.id)) && <p className="warning">{problemFor(i.events.map((e) => e.id))?.message}</p>}
                     {i.events.length > 0 && <EditButton label="Edit this sleep" onClick={() => onEdit(i.events)} />}
                     <DeleteButton label="Delete this sleep" onClick={() => onDelete(i.events)} />
                   </div>
@@ -231,6 +238,7 @@ export function Timeline({ events, now, unit, baby, activityTypes, on, onDelete,
                     <time>{clock(e.at)}</time>
                   </div>
                   {e.kind !== 'note' && <p>{eventDetail(e, unit)}</p>}
+                  {problemFor([e.id]) && <p className="warning">{problemFor([e.id])?.message}</p>}
                   {e.kind === 'feed' && e.method === 'breast' && (e.leftMin || e.rightMin) ? (
                     <div className="split">
                       <span>

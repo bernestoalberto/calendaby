@@ -11,6 +11,7 @@
 | Backend (`backend/`) | Hono routes on SQLite (`node:sqlite`). One POST route per operationId: `recordEvents`, `listEvents`. Every input is required and strict, every operation has a one-line description. |
 | Agent (`agent/agent.ts`) | `capture` and `chat` modes using the AI SDK tool loop. Capture tools: `record_events`, `ask_parent`. Chat tools: `listEvents` (backend), `getPredictions`, `getOutlook` (expected next nap, wake, feed and bedtime as ranges, with their basis), `pediatric_guide`, and the Google tools. |
 | Knowledge (`src/knowledge/`) | Vetted pediatric guidance (CDC, NIH, WHO, MedlinePlus) with citations, filtered by the baby age from `birth`. `screen()` flags red-flag and dosing questions so the prompt leads with the safe advice. The agent never gives doses or diagnoses. |
+| Growth (`src/domain/growth.ts`, `milestones.ts`, `insights.ts`) | Measurements and milestone answers are events in the same log; WHO and CDC reference data, sleep ranges and insight cards are tables in the phone database. The assistant reads them through tools. |
 | Functions (`api/`) | `/api/agent` validates the request, runs the agent and validates the reply. `/api/backend/*` serves the backend routes. |
 
 ## Data flow
@@ -90,6 +91,10 @@ Import the repo, set `OPEN_ROUTER_API`, optionally `MODEL_NAME`, and `AGENT_ALLO
 - Parent text is data, never instructions; the agent is not a doctor.
 - Sync: the household is the sync unit. Device SQLite stays the thing the app reads; a hosted libSQL (Turso) database holds changes per household, numbered so each phone can ask for what it has not seen. Chosen over Postgres because the schema and tests match the device and backend SQLite; chosen over WebSockets and push for simplicity; each caregiver keeps their own login.
 
+- Measurements and milestone answers are events, not new tables or routes, so they sync, edit, undo and reach the other parent through the pipeline that already exists. Chosen over a `milestone_check` table because that would have needed server routes and a second sync.
+- Insights are generated on the phone that asks, saved there and not shared: no server job, no stored device tokens, no new secret. The cost is one model call per phone and no notification to a closed app. Real push (FCM, a daily cron, tokens in Turso) is the next step if that matters.
+- The model names sources by id and the server turns them into links, and a card that fails the rules is dropped rather than repaired, because a model can be steered by anything in the data it reads.
+
 ## Changelog
 
 - Scaffolded the PWA with rules parser, duplicate guard, handoff brief and Capacitor config.
@@ -100,3 +105,4 @@ Import the repo, set `OPEN_ROUTER_API`, optionally `MODEL_NAME`, and `AGENT_ALLO
 - Fixed the Agent screen crash (scroll effect) and the two-tab database clash.
 - Added shared household storage (`backend/household.ts`): households, members, invite codes, scoped, numbered, tombstoned events. Not wired to the app yet.
 - Added the seeding mechanism (`seeds.ts`, `seed_applied`, schema v9): starting data is planted once per phone and new defaults reach existing phones as new seeds.
+- Added growth measurements, WHO percentiles, CDC milestones, insight cards with a local notification, sleep intelligence (age-based goal, data checks, still-asleep alert) and four WebMCP tools (schema v11 to v14).

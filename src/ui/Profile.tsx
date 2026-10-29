@@ -26,6 +26,8 @@ interface Props {
   unit: Unit
   lists: Record<ListId, string[]>
   sleepGoalHours: number
+  sleepAuto: boolean
+  onSleepAuto: (auto: boolean) => void
   onSleepGoal: (hours: number) => void
   onAddOption: (list: ListId, value: string) => Promise<string | undefined>
   onRemoveOption: (list: ListId, value: string) => void
@@ -188,6 +190,8 @@ export function Profile(p: Readonly<Props>) {
         lists={p.lists}
         sleepGoalHours={p.sleepGoalHours}
         onSleepGoal={p.onSleepGoal}
+        sleepAuto={p.sleepAuto}
+        onSleepAuto={p.onSleepAuto}
         onAdd={p.onAddOption}
         onRemove={p.onRemoveOption}
         onRestore={p.onRestoreOptions}

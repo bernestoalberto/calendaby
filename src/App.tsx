@@ -7,11 +7,13 @@ import { openDriver } from './db/open'
 import { appointmentAlerts } from './domain/appointmentAlerts'
 import { Appointment as AppointmentSchema, type Appointment } from './domain/appointments'
 import { buildAgenda, type CalendarEvent } from './domain/calendar'
-import { napForecast } from './domain/analytics'
+import { dailyStats, napForecast } from './domain/analytics'
+import { goalNote, needFor, smartSleepGoal, type SleepNeed } from './domain/sleepGoal'
+import { sleepIssues } from './domain/sleepIssues'
 import type { ActivityType } from './domain/activities'
 import { DEFAULT_SETTINGS, type ListId } from './domain/options'
 import { featureFlags, type FeatureRow } from './domain/features'
-import type { BabyEvent, DraftEvent } from './domain/events'
+import { DraftEventSchema, type BabyEvent, type DraftEvent } from './domain/events'
 import { briefingAlert, smartAlerts } from './domain/notifications'
 import { newProposals, proposalAlert } from './domain/newProposals'
 import { visitPrep, type VisitPrep } from './domain/visitPrep'
@@ -40,7 +42,14 @@ import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
 import type { GrowthRef, Sex } from './domain/growthReference'
+import { bodyUnits, growthTiles } from './domain/growth'
 import { Growth } from './ui/Growth'
+import { InsightCards } from './ui/InsightCards'
+import { insightAlert, insightSignature, insightsDue } from './domain/insights'
+import type { StoredInsight } from './domain/store'
+import { Milestones } from './ui/Milestones'
+import { milestoneReport, wholeMonths, type MilestoneState } from './domain/milestones'
+import type { Milestone } from './knowledge/milestones'
 import type { LogTab } from './ui/Logger'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
@@ -48,7 +57,7 @@ import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { forgetPendingJoin, peekPendingJoin } from './pendingJoin'
 import { shareText } from './share'
-import { describeDay, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
+import { describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, registerWebMcpTools, type MeasurementInput, type WebMcpHandlers } from './webmcp'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
@@ -70,7 +79,7 @@ function numberSetting(stored: string | undefined, fallback: string, min: number
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
-type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'calendar' | 'agent' | 'profile'
+type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'growth' | 'calendar' | 'agent' | 'profile'
 const TWO_WEEKS = 14 * 24 * 3_600_000
 const GMAIL_CHECK_MS = 30 * 60_000
 type Toast = { text: string; undo?: BabyEvent[] }
@@ -104,6 +113,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [birth, setBirth] = useState(() => store.setting('birth') ?? '')
   const [babySex, setBabySex] = useState<Sex | undefined>(() => toSex(store.setting('babySex')))
   const [growthRef, setGrowthRef] = useState<GrowthRef[]>([])
+  const [milestones, setMilestones] = useState<Milestone[]>([])
+  const [insights, setInsights] = useState<StoredInsight[]>([])
   const [unit, setUnit] = useState<Unit>(() => (store.setting('unit') === 'ml' ? 'ml' : 'oz'))
   const [lists, setLists] = useState(() => store.allOptions())
   const [sleepGoalHours, setSleepGoalHours] = useState(() => numberSetting(store.setting('sleepGoalHours'), DEFAULT_SETTINGS.sleepGoalHours, 1))
@@ -113,6 +124,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
   const [reminders, setReminders] = useState(false)
+  const [sleepNeeds, setSleepNeeds] = useState<SleepNeed[]>([])
+  const [sleepAuto, setSleepAuto] = useState(() => store.setting('sleepGoalAuto') === 'on')
   // Off until a parent turns it on; the choice is kept on the phone like the reminders switch.
   const [shareUsage, setShareUsage] = useState(false)
   const [briefingTime, setBriefingTime] = useState(() => store.setting('briefingTime') ?? DEFAULT_SETTINGS.briefingTime)
@@ -185,6 +198,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     })
     void store.listAgeNorms().then(setAgeNorms)
     void store.listGrowthReference().then(setGrowthRef)
+    void store.listSleepNeeds().then(setSleepNeeds)
+    void store.listMilestones().then(setMilestones)
+    void store.listInsights().then(setInsights)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
       if (!parsed.success) return
@@ -222,6 +238,19 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
   const lastOf = (kind: BabyEvent['kind']) => [...events].reverse().find((e) => e.kind === kind)
   const age = birth ? babyAge(birth, now) : undefined
+  const sleepGoal = useMemo(
+    () =>
+      smartSleepGoal({
+        auto: sleepAuto,
+        setHours: sleepGoalHours,
+        need: needFor(sleepNeeds, weeks),
+        days: dailyStats(events, 8, now).slice(0, -1),
+      }),
+    [sleepAuto, sleepGoalHours, sleepNeeds, weeks, events, now],
+  )
+  const sleepProblems = useMemo(() => sleepIssues(events, now), [events, now])
+  /** Problems already announced, so a notification is sent once per problem and not every time the app opens. */
+  const announcedSleep = useRef<Set<string>>(new Set(JSON.parse(store.setting('sleepIssuesNotified') ?? '[]') as string[]))
 
   useEffect(() => {
     const active = reminders && notifAccess === 'granted'
@@ -235,6 +264,14 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       : []
     void syncNapNotifications(active, alerts)
   }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight])
+
+  useEffect(() => {
+    const fresh = sleepProblems.filter((p) => !announcedSleep.current.has(p.key))
+    if (fresh.length === 0) return
+    for (const p of fresh) announcedSleep.current.add(p.key)
+    void store.setSetting('sleepIssuesNotified', JSON.stringify([...announcedSleep.current].slice(-50)))
+    if (reminders && notifAccess === 'granted' && on('alertSleepCheck')) void notifyNow(`${baby}: check the sleep log`, fresh[0].message)
+  }, [sleepProblems, reminders, notifAccess, on, baby, store])
 
   const prep = useMemo(() => {
     const out: Record<string, VisitPrep> = {}
@@ -320,6 +357,74 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [account.signedIn, on])
 
+  /**
+   * Asks the assistant for new insight cards when something about the baby changed (a measurement, a milestone answer, a
+   * new checklist) or a day has passed, and says so in a notification. Needs the assistant to be reachable; logging never
+   * waits for it. The try is recorded even when it fails, so a server that is down is asked once per minimum gap.
+   */
+  async function maybeAskInsights() {
+    if (insightsBusy.current) return
+    const months = wholeMonths(birth || undefined, nowMs())
+    const signature = insightSignature(events, months)
+    const lastRun = Number(store.setting('insightsLastRun')) || undefined
+    const due = insightsDue({
+      enabled: on('aiInsights'),
+      online: online !== false && navigator.onLine,
+      hasBirth: birth !== '',
+      signature,
+      lastSignature: store.setting('insightsSignature'),
+      lastRun,
+      now: nowMs(),
+    })
+    if (!due) return
+    insightsBusy.current = true
+    const at = nowMs()
+    try {
+      const res = await callAgent({
+        mode: 'insights',
+        prompt: 'insights',
+        now: isoWithOffset(new Date(at)),
+        birth: birth || undefined,
+        sex: babySex,
+        events: events.slice(-500),
+        measures: events.filter((e) => e.kind === 'measure').slice(-200),
+        marks: events.filter((e) => e.kind === 'milestone').slice(-400),
+      })
+      const cards = res.insights ?? []
+      if (cards.length > 0) {
+        await store.addInsights(cards, at)
+        setInsights(await store.listInsights())
+        const { reminders: remind, notifAccess: access, baby: name } = latest.current
+        if (remind && access === 'granted' && on('alertInsights')) {
+          const message = insightAlert(name, cards)
+          void notifyNow(message.title, message.body)
+        }
+      }
+    } catch (err) {
+      console.warn('Could not get new insights', err)
+    } finally {
+      await store.setSetting('insightsLastRun', String(at))
+      await store.setSetting('insightsSignature', signature)
+      insightsBusy.current = false
+    }
+  }
+  const insightsBusy = useRef(false)
+  const askInsights = useRef(maybeAskInsights)
+  askInsights.current = maybeAskInsights
+  const insightSig = insightSignature(events, wholeMonths(birth || undefined, now))
+
+  useEffect(() => {
+    void askInsights.current()
+    const onVisible = () => document.visibilityState === 'visible' && void askInsights.current()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [insightSig, birth, online, on])
+
+  async function dismissInsight(id: string) {
+    await store.dismissInsight(id)
+    setInsights(await store.listInsights())
+  }
+
   function reload() {
     setEvents(store.list())
     setNow(nowMs())
@@ -398,6 +503,24 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     return outcome
   }
 
+  /** A measurement an assistant read out. Checked like a typed one, shown to the parent and undoable. */
+  async function logMeasurementForAssistant(input: MeasurementInput): Promise<string> {
+    const at = input.when ? Date.parse(input.when) : nowMs()
+    if (at > nowMs() + 60_000) return 'Not logged: a measurement cannot be in the future'
+    const draft = DraftEventSchema.safeParse({
+      kind: 'measure',
+      at,
+      weightG: input.weightKg === undefined ? undefined : Math.round(input.weightKg * 1000),
+      lengthMm: input.lengthCm === undefined ? undefined : Math.round(input.lengthCm * 10),
+      headMm: input.headCm === undefined ? undefined : Math.round(input.headCm * 10),
+    })
+    if (!draft.success) return `Not logged: ${draft.error.issues[0]?.message ?? 'those values are not possible'}`
+    const { added, problems } = await logAll([draft.data])
+    const outcome = logOutcome(added, problems, [])
+    setToast({ text: `Assistant: ${outcome}`, undo: added.length ? added : undefined })
+    return outcome
+  }
+
   const assistant = useRef<WebMcpHandlers>(null)
   assistant.current = {
     logText: logForAssistant,
@@ -405,6 +528,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     today: () => describeDay(day, baby),
     upcoming: () =>
       describeUpcoming(feedForecast(events, nowMs()), sleepForecast(events, nowMs()), diaperForecast(events, nowMs()), baby),
+    logMeasurement: logMeasurementForAssistant,
+    growth: () => describeGrowth(growthTiles(events, bodyUnits('ml'), babySex, birth || undefined, growthRef), baby),
+    milestones: () => describeMilestones(milestoneReport(milestones, events, wholeMonths(birth || undefined, nowMs())), baby),
+    insights: () => describeInsights(insights, baby),
   }
   useEffect(
     () =>
@@ -413,6 +540,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         handoff: () => assistant.current?.handoff() ?? '',
         today: () => assistant.current?.today() ?? '',
         upcoming: () => assistant.current?.upcoming() ?? '',
+        logMeasurement: (input) => assistant.current?.logMeasurement(input) ?? Promise.resolve('The app is not ready'),
+        growth: () => assistant.current?.growth() ?? '',
+        milestones: () => assistant.current?.milestones() ?? '',
+        insights: () => assistant.current?.insights() ?? '',
       }),
     [],
   )
@@ -560,6 +691,17 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
+  /** A parent's answer about one milestone; the latest answer for an item counts. */
+  async function markMilestone(m: Milestone, state: MilestoneState) {
+    const { problems } = await logAll([{ kind: 'milestone', at: nowMs(), milestoneId: m.id, state, text: m.text }])
+    if (problems.length > 0) setToast({ text: problems[0] })
+  }
+
+  function changeSleepAuto(auto: boolean) {
+    setSleepAuto(auto)
+    void store.setSetting('sleepGoalAuto', auto ? 'on' : 'off')
+  }
+
   function changeSleepGoal(hours: number) {
     setSleepGoalHours(hours)
     void store.setSetting('sleepGoalHours', String(hours))
@@ -602,6 +744,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     activity: 'Activity',
     log: 'Log',
     analytics: 'Analytics',
+    growth: 'Growth & milestones',
     calendar: 'Calendar',
     agent: 'Agent',
     profile: 'Profile',
@@ -642,7 +785,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             baby={baby}
             now={now}
             unit={unit}
-            sleepGoalHours={sleepGoalHours}
+            sleepGoalHours={sleepGoal.hours}
+            sleepGoalNote={goalNote(sleepGoal)}
+            sleepIssues={sleepProblems}
+            onReviewSleep={() => setTab('timeline')}
             current={current}
             asleep={asleep}
             lastDone={lastDone}
@@ -663,7 +809,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onToggleSleep={toggleSleep}
             onQuick={openLog}
             onFullStats={() => setTab('analytics')}
-            onGrowth={() => setTab('analytics')}
+            onGrowth={() => setTab('growth')}
+            insights={insights}
+            onDismissInsight={(id) => void dismissInsight(id)}
+            growth={growthTiles(events, bodyUnits(unit), babySex, birth || undefined, growthRef)}
             onShareHandoff={() => setSheet('handoff')}
             onAsk={(prompt) => {
               setTab('agent')
@@ -693,7 +842,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           />
         )}
         {tab === 'timeline' && on('timeline') && (
-          <Timeline events={events} now={now} unit={unit} baby={baby} activityTypes={activityTypes} on={on} onDelete={(list) => void remove(list)} onEdit={setEditing} />
+          <Timeline events={events} now={now} unit={unit} baby={baby} activityTypes={activityTypes} on={on} issues={sleepProblems} onDelete={(list) => void remove(list)} onEdit={setEditing} />
         )}
         {tab === 'activity' && on('activities') && (
           <Activity
@@ -709,7 +858,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           />
         )}
         {tab === 'analytics' && on('analytics') && (
-          <>
+          <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
+        )}
+        {tab === 'growth' && (
+          <div className="stack">
+            <h2 className="page-title">Growth &amp; milestones</h2>
+            {on('aiInsights') && <InsightCards cards={insights} onDismiss={(id) => void dismissInsight(id)} />}
             {on('growth') && (
               <Growth
                 baby={baby}
@@ -726,8 +880,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
                 onEdit={setEditing}
               />
             )}
-            <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
-          </>
+            {on('milestones') && <Milestones baby={baby} milestones={milestones} events={events} months={wholeMonths(birth || undefined, now)} onMark={(m, state) => void markMilestone(m, state)} />}
+          </div>
         )}
         {tab === 'calendar' && on('calendar') && (
           <Calendar
@@ -759,6 +913,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             lists={lists}
             sleepGoalHours={sleepGoalHours}
             onSleepGoal={changeSleepGoal}
+            sleepAuto={sleepAuto}
+            onSleepAuto={changeSleepAuto}
             onAddOption={addOption}
             onRemoveOption={(list, value) => void removeOption(list, value)}
             onRestoreOptions={(list) => void restoreOptions(list)}

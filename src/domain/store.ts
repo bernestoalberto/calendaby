@@ -5,6 +5,9 @@ import { activityId, type ActivityType } from './activities'
 import type { AgeNorm } from './ageNorms'
 import type { FeatureRow } from './features'
 import type { GrowthRef } from './growthReference'
+import { InsightCard } from './insights'
+import type { SleepNeed } from './sleepGoal'
+import type { Milestone } from '../knowledge/milestones'
 import { DEFAULT_LISTS, OPTION_LISTS, optionProblem, type ListId } from './options'
 import { SEEDS, type Seed } from './seeds'
 import { isSharedKey, SHARED_KEYS, type SettingChange, type SharedSetting } from './sharedSettings'
@@ -33,7 +36,8 @@ export function findDuplicate(events: BabyEvent[], draft: DraftEvent): BabyEvent
       e.kind === draft.kind &&
       Math.abs(e.at - draft.at) < DUPLICATE_WINDOW_MS &&
       (e.kind !== 'sleep' || draft.kind !== 'sleep' || e.phase === draft.phase) &&
-      (e.kind !== 'activity' || draft.kind !== 'activity' || e.type === draft.type),
+      (e.kind !== 'activity' || draft.kind !== 'activity' || e.type === draft.type) &&
+      (e.kind !== 'milestone' || draft.kind !== 'milestone' || (e.milestoneId === draft.milestoneId && e.state === draft.state)),
   )
 }
 
@@ -42,7 +46,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 11
+const SCHEMA_VERSION = 14
 
 // An entry this phone already had keeps its origin; the server also sends back what this phone uploaded.
 const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at, remote)
@@ -143,8 +147,46 @@ const MIGRATIONS: Record<number, string[]> = {
       PRIMARY KEY (sex, kind, month)
     )`,
   ],
+  // The CDC milestone checklists, planted by the milestones seed. A parent's answers are events, not rows here.
+  12: [
+    `CREATE TABLE IF NOT EXISTS milestone (
+      id TEXT PRIMARY KEY,
+      age_months INTEGER NOT NULL,
+      area TEXT NOT NULL,
+      text TEXT NOT NULL,
+      sort INTEGER NOT NULL
+    )`,
+  ],
+  // How many hours of sleep a day the CDC gives for each age, planted by the sleepNeed seed.
+  13: [
+    `CREATE TABLE IF NOT EXISTS sleep_need (
+      from_weeks INTEGER PRIMARY KEY,
+      to_weeks INTEGER NOT NULL,
+      low_hours INTEGER NOT NULL,
+      high_hours INTEGER NOT NULL
+    )`,
+  ],
+  // Insight cards the assistant wrote for this phone. Not shared: each phone asks for its own.
+  14: [
+    `CREATE TABLE IF NOT EXISTS insight (
+      id TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      topic TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      sources TEXT NOT NULL,
+      dismissed INTEGER NOT NULL DEFAULT 0
+    )`,
+  ],
 }
 
+const INSERT_INSIGHT_SQL = 'INSERT OR IGNORE INTO insight (id, created_at, topic, title, body, sources) VALUES (?, ?, ?, ?, ?, ?)'
+const LIST_INSIGHTS_SQL = 'SELECT id, created_at AS createdAt, topic, title, body, sources FROM insight WHERE dismissed = 0 ORDER BY created_at DESC, id LIMIT ?'
+const DISMISS_INSIGHT_SQL = 'UPDATE insight SET dismissed = 1 WHERE id = ?'
+// Keeps the newest cards; older ones, dismissed or not, are not worth storing.
+const TRIM_INSIGHTS_SQL = 'DELETE FROM insight WHERE id NOT IN (SELECT id FROM insight ORDER BY created_at DESC, id LIMIT 60)'
+const LIST_SLEEP_NEEDS_SQL = 'SELECT from_weeks AS fromWeeks, to_weeks AS toWeeks, low_hours AS lowHours, high_hours AS highHours FROM sleep_need ORDER BY from_weeks'
+const LIST_MILESTONES_SQL = 'SELECT id, age_months AS ageMonths, area, text, sort FROM milestone ORDER BY age_months, sort'
 const LIST_GROWTH_REFERENCE_SQL = 'SELECT sex, kind, month, l, m, s FROM growth_reference ORDER BY sex, kind, month'
 
 /** What a phone has to send: events to upload, ids to delete, and the outbox rows these came from. */
@@ -158,6 +200,8 @@ export interface RemoteChange {
   event: BabyEvent
   deleted: boolean
 }
+
+export type StoredInsight = InsightCard & { id: string; createdAt: number }
 
 /** The localStorage key the first MVP used; its events move into SQLite on first open. */
 export const LEGACY_KEY = 'calendaby.events.v1'
@@ -408,6 +452,37 @@ export class SqliteEventStore implements EventStore {
     await this.reloadEvents()
     await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
     await this.db.exec('UPDATE shared_setting SET version = version + 1, fill = 1')
+  }
+
+  /** Saves fresh cards, newest first when listed. */
+  async addInsights(cards: InsightCard[], at: number): Promise<void> {
+    for (const [i, c] of cards.entries()) {
+      await this.db.exec(INSERT_INSIGHT_SQL, [`${at}-${i}`, at, c.topic, c.title, c.body, JSON.stringify(c.sources)])
+    }
+    await this.db.exec(TRIM_INSIGHTS_SQL)
+  }
+
+  /** The cards not yet dismissed. A stored row that no longer fits the card rules is skipped, not shown. */
+  async listInsights(limit = 20): Promise<StoredInsight[]> {
+    const rows = await this.db.query<{ id: string; createdAt: number; topic: string; title: string; body: string; sources: string }>(LIST_INSIGHTS_SQL, [limit])
+    return rows.flatMap((r) => {
+      const card = InsightCard.safeParse({ topic: r.topic, title: r.title, body: r.body, sources: JSON.parse(r.sources) })
+      return card.success ? [{ ...card.data, id: r.id, createdAt: r.createdAt }] : []
+    })
+  }
+
+  async dismissInsight(id: string): Promise<void> {
+    await this.db.exec(DISMISS_INSIGHT_SQL, [id])
+  }
+
+  async listSleepNeeds(): Promise<SleepNeed[]> {
+    const rows = await this.db.query<{ fromWeeks: number; toWeeks: number; lowHours: number; highHours: number }>(LIST_SLEEP_NEEDS_SQL)
+    return rows.map((r) => ({ fromWeeks: r.fromWeeks, toWeeks: r.toWeeks, lowHours: r.lowHours, highHours: r.highHours }))
+  }
+
+  async listMilestones(): Promise<Milestone[]> {
+    const rows = await this.db.query<{ id: string; ageMonths: number; area: Milestone['area']; text: string; sort: number }>(LIST_MILESTONES_SQL)
+    return rows.map((r) => ({ id: r.id, ageMonths: r.ageMonths, area: r.area, text: r.text, sort: r.sort }))
   }
 
   async listGrowthReference(): Promise<GrowthRef[]> {

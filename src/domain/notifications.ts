@@ -17,7 +17,8 @@ export const WAKE_SOON_ID = 103
 export const FEED_DUE_ID = 104
 export const DIAPER_CHECK_ID = 105
 export const BRIEFING_ID = 106
-export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID, BRIEFING_ID] as const
+export const SLEEP_CHECK_ID = 107
+export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID, BRIEFING_ID, SLEEP_CHECK_ID] as const
 
 /** The `features` row that switches each alert on or off. */
 export const ALERT_FEATURE: Record<number, string> = {
@@ -27,8 +28,28 @@ export const ALERT_FEATURE: Record<number, string> = {
   [FEED_DUE_ID]: 'alertFeed',
   [DIAPER_CHECK_ID]: 'alertDiaper',
   [BRIEFING_ID]: 'alertBriefing',
+  [SLEEP_CHECK_ID]: 'alertSleepCheck',
 }
 export const NAP_LEAD_MS = 15 * 60_000
+const HOUR = 3_600_000
+
+/**
+ * A nudge for a sleep that has run longer than this baby's naps usually do, in case the wake-up was not logged. A nap is
+ * checked after twice the usual nap (between 2 and 4 hours, 3 when there is no history); a night after 12 hours.
+ */
+export function sleepCheckAlert(baby: string, start: number, usualNapMin: number | undefined, now: number): NapAlert | undefined {
+  const hour = new Date(start).getHours()
+  const night = hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR
+  const napMs = Math.min(4 * HOUR, Math.max(2 * HOUR, usualNapMin === undefined ? 3 * HOUR : usualNapMin * 2 * 60_000))
+  const at = start + (night ? 12 * HOUR : napMs)
+  if (at <= now) return undefined
+  return {
+    id: SLEEP_CHECK_ID,
+    at,
+    title: `${baby}: still asleep?`,
+    body: `Asleep since ${clockText(start)}. If ${baby} is up, log the wake-up so the sleep totals stay right.`,
+  }
+}
 
 function clockText(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -99,6 +120,11 @@ export function smartAlerts(baby: string, events: BabyEvent[], now: number, on: 
       title: `${baby}: likely waking soon`,
       body: `${baby}'s daytime naps average ${formatMinutes(sleep.usualNapMin)}. Good window to prep the next feed.`,
     })
+  }
+
+  if (asleep && currentSleep) {
+    const check = sleepCheckAlert(baby, currentSleep.start, sleep.usualNapMin, now)
+    if (check) out.push(check)
   }
 
   const feed = feedForecast(events, now)

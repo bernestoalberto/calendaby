@@ -1,42 +1,259 @@
 [
   {
     "name": "Log a bottle feed",
-    "messages": [{ "role": "user", "type": "message", "content": "She just finished a 4 oz bottle." }],
-    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "4\\s*(oz|OZ|ounce)" } } }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "She just finished a 4 oz bottle."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "log_baby_event",
+        "arguments": {
+          "text": {
+            "$pattern": "4\\s*(oz|OZ|ounce)"
+          }
+        }
+      }
+    ]
   },
   {
     "name": "Log a wet diaper",
-    "messages": [{ "role": "user", "type": "message", "content": "Log that I just changed a wet diaper." }],
-    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "[Ww]et" } } }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "Log that I just changed a wet diaper."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "log_baby_event",
+        "arguments": {
+          "text": {
+            "$pattern": "[Ww]et"
+          }
+        }
+      }
+    ]
   },
   {
     "name": "Log the start of a nap",
-    "messages": [{ "role": "user", "type": "message", "content": "She just went down for a nap, note it for me." }],
-    "expectedCall": [{ "functionName": "log_baby_event", "arguments": { "text": { "$pattern": "nap|sleep|asleep|down" } } }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "She just went down for a nap, note it for me."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "log_baby_event",
+        "arguments": {
+          "text": {
+            "$pattern": "nap|sleep|asleep|down"
+          }
+        }
+      }
+    ]
   },
   {
     "name": "Ask when the next nap is",
-    "messages": [{ "role": "user", "type": "message", "content": "When is the next nap?" }],
-    "expectedCall": [{ "functionName": "get_upcoming_predictions", "arguments": {} }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "When is the next nap?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_upcoming_predictions",
+        "arguments": {}
+      }
+    ]
   },
   {
     "name": "Ask when the next feed is",
-    "messages": [{ "role": "user", "type": "message", "content": "When should I expect to feed her again?" }],
-    "expectedCall": [{ "functionName": "get_upcoming_predictions", "arguments": {} }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "When should I expect to feed her again?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_upcoming_predictions",
+        "arguments": {}
+      }
+    ]
   },
   {
     "name": "Ask for a handoff to the other parent",
-    "messages": [{ "role": "user", "type": "message", "content": "My wife is taking over in ten minutes. What should I tell her?" }],
-    "expectedCall": [{ "functionName": "get_handoff_brief", "arguments": {} }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "My wife is taking over in ten minutes. What should I tell her?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_handoff_brief",
+        "arguments": {}
+      }
+    ]
   },
   {
     "name": "Ask for today's totals",
-    "messages": [{ "role": "user", "type": "message", "content": "How many feeds and diapers has she had today?" }],
-    "expectedCall": [{ "functionName": "get_today_summary", "arguments": {} }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "How many feeds and diapers has she had today?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_today_summary",
+        "arguments": {}
+      }
+    ]
   },
   {
     "name": "Ask how much she slept today",
-    "messages": [{ "role": "user", "type": "message", "content": "How much has she slept so far today?" }],
-    "expectedCall": [{ "functionName": "get_today_summary", "arguments": {} }]
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "How much has she slept so far today?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_today_summary",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Log a weight and length",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "At the checkup she weighed 6.2 kg and was 62 cm long."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "log_measurement",
+        "arguments": {
+          "weightKg": 6.2,
+          "lengthCm": 62
+        }
+      }
+    ]
+  },
+  {
+    "name": "Log a head size",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "The nurse measured her head at 41 cm."
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "log_measurement",
+        "arguments": {
+          "headCm": 41
+        }
+      }
+    ]
+  },
+  {
+    "name": "Ask how her growth is going",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "How is her weight tracking?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_growth",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Ask for the percentile",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "What percentile is she on for height?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_growth",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Ask what she should be doing",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "What should she be doing at this age?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_milestones",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Ask which milestones are not yet",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "Which milestones haven't we ticked off yet?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_milestones",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Ask for new notes",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "Anything new the app noticed about her?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_insights",
+        "arguments": {}
+      }
+    ]
   }
 ]

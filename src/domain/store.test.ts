@@ -27,6 +27,33 @@ class MapStorage implements Storage {
 }
 
 describe('SqliteEventStore', () => {
+  it('plants the CDC milestones and sleep ranges once', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    const milestones = await store.listMilestones()
+    expect(milestones.length).toBeGreaterThan(100)
+    expect(milestones.find((m) => m.id === '6-movement-1')).toMatchObject({ ageMonths: 6, area: 'movement', text: 'Rolls from tummy to back' })
+    expect(await store.listSleepNeeds()).toMatchObject([{ lowHours: 14, highHours: 17 }, { lowHours: 12 }, { lowHours: 11 }, { lowHours: 10 }])
+    const again = await SqliteEventStore.open(db)
+    expect(await again.listMilestones()).toHaveLength(milestones.length)
+  })
+
+  it('starts with the automatic sleep goal on, and off for a phone whose parent chose a number', async () => {
+    expect(new NodeSqlDriver()).toBeDefined()
+    const fresh = await SqliteEventStore.open(new NodeSqlDriver())
+    expect(fresh.setting('sleepGoalAuto')).toBe('on')
+    expect((await fresh.listFeatures()).find((f) => f.id === 'alertSleepCheck')).toMatchObject({ enabled: true })
+  })
+
+  it('lets a parent change their mind about a milestone at once but not log the same answer twice', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const mark = (state: 'yes' | 'not_yet', at: number) => store.append({ kind: 'milestone', at, milestoneId: '6-movement-1', state, text: 'Rolls from tummy to back' }, 'dad')
+    await mark('not_yet', 1_000_000)
+    await mark('yes', 1_030_000)
+    await expect(mark('yes', 1_040_000)).rejects.toThrow(DuplicateEventError)
+    expect(store.list().filter((e) => e.kind === 'milestone')).toHaveLength(2)
+  })
+
   it('plants the WHO growth standards once and returns them as stored', async () => {
     const db = new NodeSqlDriver()
     const store = await SqliteEventStore.open(db)

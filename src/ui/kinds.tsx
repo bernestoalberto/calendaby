@@ -5,6 +5,8 @@ import { formatAmount, type Unit } from './time'
 
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 
+const STATE_TEXT = { yes: 'Does this now', not_yet: 'Not yet', unsure: 'Not sure' } as const
+
 function measureParts(e: Extract<BabyEvent, { kind: 'measure' }>, unit: Unit): string[] {
   return MEASURES.flatMap((m) => {
     const value = measureValue(e, m.id)
@@ -32,6 +34,8 @@ export function eventTitle(e: BabyEvent, unit: Unit = 'ml', types: ActivityType[
       return `Pumped${e.amountMl ? ` · ${formatAmount(e.amountMl, unit)}` : ''}`
     case 'measure':
       return `Growth · ${measureParts(e, unit).join(', ')}`
+    case 'milestone':
+      return e.text
   }
 }
 
@@ -53,6 +57,8 @@ export function eventHeading(e: BabyEvent, types: ActivityType[] = DEFAULT_ACTIV
       return 'Pumping'
     case 'measure':
       return 'Growth'
+    case 'milestone':
+      return 'Milestone'
   }
 }
 
@@ -76,6 +82,8 @@ export function eventDetail(e: BabyEvent, unit: Unit): string {
     }
     case 'measure':
       return measureParts(e, unit).join(' · ')
+    case 'milestone':
+      return STATE_TEXT[e.state]
     default:
       return ''
   }

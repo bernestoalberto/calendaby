@@ -239,6 +239,35 @@ describe('two phones, two accounts, one household', () => {
     expect((await syncOnce(mom, callAs('tok_mom'))).settingsChanged).toBe(false)
   })
 
+  it('carries a measurement, a milestone answer and the baby sex to the other parent', async () => {
+    const mom = await phone()
+    const dad = await phone()
+    await join(callAs('tok_mom'), callAs('tok_dad'), 'Dad')
+
+    await mom.append({ kind: 'measure', at: 5_000_000, weightG: 6200, lengthMm: 620, headMm: 410 }, 'Mom')
+    await mom.append({ kind: 'milestone', at: 5_100_000, milestoneId: '6-movement-1', state: 'yes', text: 'Rolls from tummy to back' }, 'Mom')
+    await mom.setSetting('babySex', 'girl')
+    await syncOnce(mom, callAs('tok_mom'))
+    await syncOnce(dad, callAs('tok_dad'))
+
+    expect(dad.list()).toMatchObject([
+      { kind: 'measure', weightG: 6200, lengthMm: 620, headMm: 410, loggedBy: 'Mom' },
+      { kind: 'milestone', milestoneId: '6-movement-1', state: 'yes' },
+    ])
+    expect(await dad.getSetting('babySex')).toBe('girl')
+
+    await dad.append({ kind: 'milestone', at: 6_000_000, milestoneId: '6-movement-1', state: 'not_yet', text: 'Rolls from tummy to back' }, 'Dad')
+    await syncOnce(dad, callAs('tok_dad'))
+    await syncOnce(mom, callAs('tok_mom'))
+    expect(mom.list().filter((e) => e.kind === 'milestone')).toHaveLength(2)
+  })
+
+  it('refuses a sex that is not girl or boy', async () => {
+    const mom = await phone()
+    await mom.setSetting('babySex', 'dragon')
+    await expect(syncOnce(mom, callAs('tok_mom'))).rejects.toThrow()
+  })
+
   it('gives a new household the values from the phone that creates it', async () => {
     const mom = await phone()
     await mom.setSetting('baby', 'Lily')

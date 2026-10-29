@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BabyEvent } from './events'
-import { BRIEFING_ID, DIAPER_CHECK_ID, FEED_DUE_ID, NAP_DUE_ID, NAP_LEAD_MS, NAP_SOON_ID, WAKE_SOON_ID, briefingAlert, napAlerts, smartAlerts } from './notifications'
+import { BRIEFING_ID, DIAPER_CHECK_ID, FEED_DUE_ID, NAP_DUE_ID, NAP_LEAD_MS, NAP_SOON_ID, WAKE_SOON_ID, SLEEP_CHECK_ID, briefingAlert, napAlerts, sleepCheckAlert, smartAlerts } from './notifications'
 import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from './predictions'
 
 describe('napAlerts', () => {
@@ -112,5 +112,34 @@ describe('briefingAlert', () => {
     expect(alert).toMatchObject({ id: BRIEFING_ID, at: new Date(2026, 9, 23, 7, 30).getTime() })
     expect(alert.body).toContain('about 2 night feeds, longest stretch ~5h')
     expect(briefingAlert('Maya', '07:30', undefined, new Date(2026, 9, 22, 6, 0).getTime()).at).toBe(new Date(2026, 9, 22, 7, 30).getTime())
+  })
+})
+
+describe('sleepCheckAlert', () => {
+  const H = 3_600_000
+  const nap = new Date('2026-10-22T13:00:00').getTime()
+  const night = new Date('2026-10-22T20:00:00').getTime()
+
+  it('checks a nap after twice the usual nap, kept between 2 and 4 hours', () => {
+    expect(sleepCheckAlert('Maya', nap, 60, nap + 10 * 60_000)?.at).toBe(nap + 2 * H)
+    expect(sleepCheckAlert('Maya', nap, 90, nap + 10 * 60_000)?.at).toBe(nap + 3 * H)
+    expect(sleepCheckAlert('Maya', nap, 180, nap + 10 * 60_000)?.at).toBe(nap + 4 * H)
+    expect(sleepCheckAlert('Maya', nap, undefined, nap + 10 * 60_000)?.at).toBe(nap + 3 * H)
+  })
+
+  it('waits 12 hours for a night', () => {
+    expect(sleepCheckAlert('Maya', night, 60, night + H)?.at).toBe(night + 12 * H)
+  })
+
+  it('says what to do and has nothing to schedule once the time has passed', () => {
+    expect(sleepCheckAlert('Maya', nap, 60, nap + 10 * 60_000)).toMatchObject({ id: SLEEP_CHECK_ID, title: 'Maya: still asleep?' })
+    expect(sleepCheckAlert('Maya', nap, 60, nap + 5 * H)).toBeUndefined()
+  })
+
+  it('is part of the smart alerts while asleep and can be switched off', () => {
+    const events: BabyEvent[] = [{ id: 's', kind: 'sleep', phase: 'start', at: nap, loggedBy: 'a' }]
+    expect(smartAlerts('Maya', events, nap + 10 * 60_000).map((a) => a.id)).toContain(SLEEP_CHECK_ID)
+    expect(smartAlerts('Maya', events, nap + 10 * 60_000, (f) => f !== 'alertSleepCheck').map((a) => a.id)).not.toContain(SLEEP_CHECK_ID)
+    expect(smartAlerts('Maya', [], nap).map((a) => a.id)).not.toContain(SLEEP_CHECK_ID)
   })
 })

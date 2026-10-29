@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-  await page.waitForFunction(() => Object.keys(window.__tools).length === 4)
+  await page.waitForFunction(() => Object.keys(window.__tools).length === 8)
 })
 
 test('an assistant can log a sentence, and the parent sees it and can undo it', async ({ page }) => {
@@ -64,4 +64,24 @@ test('the Say it form is a tool, and an assistant-started submit logs and answer
 test('input that is not a sentence is refused', async ({ page }) => {
   const message = await page.evaluate(() => window.__tools.log_baby_event.execute({ text: 5 }).then(() => '', (e: Error) => e.message))
   expect(message).not.toBe('')
+})
+
+test('an assistant can log a measurement, the parent sees it and can undo it, and an impossible one is refused', async ({ page }) => {
+  const reply = await page.evaluate(() => window.__tools.log_measurement.execute({ weightKg: 6.2, lengthCm: 62 }))
+  expect(reply).toMatch(/^Logged/)
+  await expect(page.getByText(/^Assistant: Logged/)).toBeVisible()
+  expect(await page.evaluate(() => window.__tools.get_growth.execute({}))).toContain('Weight')
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(() => page.evaluate(() => window.__tools.get_growth.execute({}))).toContain('No measurements')
+
+  const refused = await page.evaluate(() => window.__tools.log_measurement.execute({ weightKg: 900 }).then(() => '', (e: Error) => e.message))
+  expect(refused).not.toBe('')
+  const future = await page.evaluate(() => window.__tools.log_measurement.execute({ weightKg: 6, when: '2099-01-01T00:00:00Z' }))
+  expect(future).toContain('Not logged')
+})
+
+test('an assistant can read milestones and insights but has no tool to answer a milestone', async ({ page }) => {
+  expect(await page.evaluate(() => window.__tools.get_milestones.execute({}))).toContain('birth date')
+  expect(await page.evaluate(() => window.__tools.get_insights.execute({}))).toContain('No new notes')
+  expect(await page.evaluate(() => Object.keys(window.__tools).filter((n) => /milestone/.test(n)))).toEqual(['get_milestones'])
 })

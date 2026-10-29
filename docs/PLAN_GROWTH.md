@@ -1,5 +1,7 @@
 # Plan: growth measurements, milestones by age, and insights
 
+**Status (2026-10-29): all phases are built and tested; see `docs/STATUS.md`. Changes from the plan:** a milestone answer is a `milestone` event instead of a `milestone_check` table, so it needs no server work; the Growth and milestones screen is its own screen, reached from the Growth card on Today, instead of living in Analytics; the switch for insight cards is `aiInsights` because `insights` already names the Coming up card; sleep intelligence (age-based goal, sleep-log checks, still-asleep alert) was added at the owner's request. Not yet done: a try with a real model and a phone.
+
 Goal: the parent logs head, length and weight; sees the baby's milestones for their age; and gets short, cited insights built from this baby's own data, as info cards and a notification.
 
 ## Decisions

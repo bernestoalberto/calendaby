@@ -5,13 +5,16 @@ interface Props {
   lists: Record<ListId, string[]>
   sleepGoalHours: number
   onSleepGoal: (hours: number) => void
+  /** The goal follows the baby's age and recent log instead of the number below. */
+  sleepAuto: boolean
+  onSleepAuto: (auto: boolean) => void
   /** Resolves to a message when the value is refused, otherwise nothing. */
   onAdd: (list: ListId, value: string) => Promise<string | undefined>
   onRemove: (list: ListId, value: string) => void
   onRestore: (list: ListId) => void
 }
 
-function ListEditor({ id, label, hint, lists, onAdd, onRemove, onRestore }: Readonly<Omit<Props, 'sleepGoalHours' | 'onSleepGoal'> & { id: ListId; label: string; hint: string }>) {
+function ListEditor({ id, label, hint, lists, onAdd, onRemove, onRestore }: Readonly<Omit<Props, 'sleepGoalHours' | 'onSleepGoal' | 'sleepAuto' | 'onSleepAuto'> & { id: ListId; label: string; hint: string }>) {
   const [draft, setDraft] = useState('')
   const [problem, setProblem] = useState<string>()
 
@@ -68,7 +71,12 @@ export function Customize(p: Readonly<Props>) {
       </div>
       <p className="muted">Change the choices you see when logging. They stay on this phone.</p>
       <label className="field">
-        <span className="field-label">Daily sleep goal (hours)</span>
+        <span className="field-label">
+          <input type="checkbox" checked={p.sleepAuto} onChange={(e) => p.onSleepAuto(e.target.checked)} /> Set the sleep goal for me (by age and the last few days)
+        </span>
+      </label>
+      <label className="field">
+        <span className="field-label">Daily sleep goal (hours){p.sleepAuto ? ', used when the automatic goal is off' : ''}</span>
         <input
           type="number"
           inputMode="decimal"

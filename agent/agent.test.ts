@@ -72,3 +72,53 @@ describe('getGrowth', () => {
     expect(JSON.stringify(model.doGenerateCalls[1].prompt)).toContain('not available')
   })
 })
+
+describe('insights mode', () => {
+  const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } }
+  const stop = { content: [{ type: 'text' as const, text: 'done' }], finishReason: { unified: 'stop' as const, raw: 'stop' }, usage, warnings: [] }
+  const calling = (toolName: string, input: unknown) => ({
+    content: [{ type: 'tool-call' as const, toolCallId: `t-${toolName}`, toolName, input: JSON.stringify(input) }],
+    finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+    usage,
+    warnings: [],
+  })
+  const req: AgentRequest = {
+    mode: 'insights',
+    prompt: 'insights',
+    now: '2026-10-29T12:00:00+00:00',
+    birth: '2026-04-20',
+    marks: [{ id: 'k1', kind: 'milestone', at: Date.parse('2026-10-28T12:00:00Z'), loggedBy: 'dad', milestoneId: '6-movement-1', state: 'not_yet', text: 'Rolls from tummy to back' }],
+  }
+
+  it('returns the cards that pass the rules and drops the rest', async () => {
+    const cards = {
+      cards: [
+        { topic: 'milestones', title: 'Rolling is not here yet', body: 'Rolling from tummy to back is marked not yet. Worth raising at the next checkup.', sources: ['cdcMilestones'] },
+        { topic: 'growth', title: 'Looks underweight', body: 'She is underweight.', sources: ['whoGrowth'] },
+      ],
+    }
+    const model = new MockLanguageModelV4({ doGenerate: [calling('publish_insights', cards), stop] })
+    const res = await runAgent(req, openDb(':memory:'), model)
+    expect(res.insights).toHaveLength(1)
+    expect(res.insights?.[0]).toMatchObject({ topic: 'milestones', title: 'Rolling is not here yet' })
+    expect(res.insights?.[0].sources[0].url).toContain('cdc.gov')
+  })
+
+  it('gives the model only the baby\'s own milestone answers and no logging tools', async () => {
+    const model = new MockLanguageModelV4({ doGenerate: [calling('getMilestones', {}), stop] })
+    await runAgent(req, openDb(':memory:'), model)
+    const tool = JSON.stringify(model.doGenerateCalls[1].prompt.filter((m) => m.role === 'tool'))
+    expect(tool).toContain('Rolls from tummy to back')
+    expect(tool).toContain('forAgeMonths')
+    const names = (model.doGenerateCalls[0].tools ?? []).map((t) => t.name)
+    expect(names).toContain('publish_insights')
+    expect(names).not.toContain('record_events')
+  })
+
+  it('has no insights when the model publishes nothing valid, and no insights field in other modes', async () => {
+    const model = new MockLanguageModelV4({ doGenerate: [calling('publish_insights', { cards: [{ topic: 'growth', title: 'x', body: 'y', sources: [] }] }), stop] })
+    expect((await runAgent(req, openDb(':memory:'), model)).insights).toEqual([])
+    const chat = new MockLanguageModelV4({ doGenerate: stop })
+    expect((await runAgent({ ...req, mode: 'chat', prompt: 'hi' }, openDb(':memory:'), chat)).insights).toBeUndefined()
+  })
+})

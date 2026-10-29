@@ -219,3 +219,23 @@ export function growthReport(
   }
   return { lines, percentiles: anyPercentile ? 'WHO growth standards' : 'not available: needs the baby sex and birth date, and a baby under 24 months' }
 }
+
+export interface GrowthTile {
+  measure: Measure
+  label: string
+  /** "6.2 kg", "62 cm" in the shown unit. */
+  text: string
+  at: number
+  /** "50th percentile", when the sex and birth date are known and the baby is under 24 months. */
+  rank?: string
+}
+
+/** The latest reading of each measurement, ready to show on the dashboard. */
+export function growthTiles(events: BabyEvent[], units: BodyUnits, sex: Sex | undefined, birth: string | undefined, reference: GrowthRef[]): GrowthTile[] {
+  return MEASURES.flatMap(({ id, label }) => {
+    const last = latest(series(events, id))
+    if (!last) return []
+    const p = percentile(reference, sex, id, last.value, ageInMonths(birth, last.at))
+    return [{ measure: id, label, text: formatMeasure(id, last.value, units), at: last.at, ...(p === undefined ? {} : { rank: percentileText(p) }) }]
+  })
+}

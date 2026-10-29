@@ -1,6 +1,8 @@
 import { DEFAULT_ACTIVITY_TYPES } from './activities'
 import { DEFAULT_AGE_NORMS } from './ageNorms'
 import { DEFAULT_FEATURES } from './features'
+import { DEFAULT_SLEEP_NEEDS } from './sleepGoal'
+import { DEFAULT_MILESTONES } from '../knowledge/milestones'
 import { WHO_GROWTH_REFERENCE } from './growthReference'
 import { DEFAULT_LISTS, DEFAULT_SETTINGS, OPTION_LISTS } from './options'
 
@@ -48,6 +50,51 @@ export const SEEDS: Seed[] = [
       ([sex, kind, month, l, m, sd]) =>
         `INSERT OR IGNORE INTO growth_reference (sex, kind, month, l, m, s) VALUES (${sqlText(sex)}, ${sqlText(kind)}, ${month}, ${l}, ${m}, ${sd})`,
     ),
+  },
+  {
+    id: 'milestones-v1',
+    since: Infinity,
+    statements: DEFAULT_MILESTONES.map(
+      (m) =>
+        `INSERT OR IGNORE INTO milestone (id, age_months, area, text, sort) VALUES (${sqlText(m.id)}, ${m.ageMonths}, ${sqlText(m.area)}, ${sqlText(m.text)}, ${m.sort})`,
+    ),
+  },
+  {
+    id: 'features-milestones-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'milestones', 'Milestones', 'CDC milestone checklists by age', 'Tabs', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
+  },
+  {
+    id: 'sleepNeed-v1',
+    since: Infinity,
+    statements: DEFAULT_SLEEP_NEEDS.map(
+      (n) => `INSERT OR IGNORE INTO sleep_need (from_weeks, to_weeks, low_hours, high_hours) VALUES (${n.fromWeeks}, ${n.toWeeks}, ${n.lowHours}, ${n.highHours})`,
+    ),
+  },
+  // Automatic is on for a phone still on the starting goal of 14 hours, and off for one whose parent chose their own number.
+  {
+    id: 'sleepGoalAuto-v1',
+    since: Infinity,
+    statements: [
+      "INSERT OR IGNORE INTO settings (key, value) SELECT 'sleepGoalAuto', CASE WHEN COALESCE((SELECT value FROM settings WHERE key = 'sleepGoalHours'), '14') = '14' THEN 'on' ELSE 'off' END",
+    ],
+  },
+  {
+    id: 'features-sleepcheck-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'alertSleepCheck', 'Sleep check', 'When a nap runs long or the sleep log looks wrong', 'Notifications', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
+  },
+  {
+    id: 'features-insights-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'aiInsights', 'Insights', 'Short notes from the assistant about growth, milestones and sleep', 'Today', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'alertInsights', 'New insight', 'A note when the assistant has something new', 'Notifications', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
   },
   {
     id: 'activityTypes-v1',

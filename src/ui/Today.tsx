@@ -4,6 +4,10 @@ import type { BabyEvent } from '../domain/events'
 import { rangeText, tonightText, type Outlook } from '../domain/outlook'
 import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
+import type { GrowthTile } from '../domain/growth'
+import type { StoredInsight } from '../domain/store'
+import { InsightCards } from './InsightCards'
+import type { SleepIssue } from '../domain/sleepIssues'
 import { formatMinutes } from '../domain/summary'
 import type { HandoffBrief } from '../agents/handoff'
 import { checkedLogText, SAY_IT_FORM_TOOL, type AgentSubmitEvent } from '../webmcp'
@@ -38,6 +42,11 @@ interface Props {
   unit: Unit
   /** The daily sleep goal in hours; the parent sets it. */
   sleepGoalHours: number
+  /** Where the goal came from, e.g. "Set by age, typical 14 to 17 h for this age". */
+  sleepGoalNote?: string
+  /** Problems found in the sleep log. */
+  sleepIssues: SleepIssue[]
+  onReviewSleep: () => void
   current?: SleepSession
   asleep: boolean
   lastDone?: SleepSession
@@ -60,6 +69,11 @@ interface Props {
   onQuick: (k: QuickKind) => void
   onFullStats: () => void
   onGrowth: () => void
+  /** The latest weight, length and head size, read-only. */
+  growth: GrowthTile[]
+  /** Notes the assistant wrote; shown newest first. */
+  insights: StoredInsight[]
+  onDismissInsight: (id: string) => void
   onShareHandoff: () => void
   onAsk: (prompt?: string) => void
 }
@@ -129,7 +143,7 @@ export function Today(p: Props) {
           const sent = e.nativeEvent as AgentSubmitEvent
           if (sent.agentInvoked && sent.respondWith) {
             // The parent pressed Log it after the assistant filled the box; the assistant is told what happened.
-            const outcome = Promise.resolve(new FormData(e.currentTarget).get('text')).then(checkedLogText).then(p.onAssistantText)
+            const outcome = Promise.resolve(new FormData(e.currentTarget).get('text')).then((text) => checkedLogText({ text })).then(p.onAssistantText)
             sent.respondWith(outcome)
             void outcome.then(() => p.onText(''), () => undefined)
             return
@@ -216,10 +230,50 @@ export function Today(p: Props) {
       </div>
       )}
 
-      {p.on('growth') && p.on('analytics') && (
-        <button type="button" className="card growth-link" onClick={p.onGrowth}>
-          <RulerIcon width={18} height={18} /> Growth: weight, length and head <ChevronRightIcon width={16} height={16} />
-        </button>
+      {p.on('aiInsights') && <InsightCards cards={p.insights} limit={2} onDismiss={p.onDismissInsight} />}
+
+      {p.sleepIssues.length > 0 && (
+        <section className="card" role="alert" aria-label="Sleep log needs a look">
+          <div className="card-head">
+            <h3>Sleep log needs a look</h3>
+            <button type="button" className="link" onClick={p.onReviewSleep}>
+              Review <ChevronRightIcon width={16} height={16} />
+            </button>
+          </div>
+          {p.sleepIssues.slice(0, 3).map((i) => (
+            <p key={i.key} className="warning">
+              {i.message}
+            </p>
+          ))}
+          {p.sleepIssues.length > 3 && <p className="muted small">and {p.sleepIssues.length - 3} more</p>}
+        </section>
+      )}
+
+      {(p.on('growth') || p.on('milestones')) && (
+        <section className="card growth-card" aria-label="Growth">
+          <div className="card-head">
+            <h3>
+              <RulerIcon width={18} height={18} /> Growth
+            </h3>
+            <button type="button" className="link" onClick={p.onGrowth}>
+              Growth &amp; milestones <ChevronRightIcon width={16} height={16} />
+            </button>
+          </div>
+          {p.growth.length > 0 ? (
+            <div className="mini-tiles" role="list">
+              {p.growth.map((t) => (
+                <div key={t.measure} role="listitem">
+                  <span className="muted small">{t.label}</span>
+                  <b>{t.text}</b>
+                  <span className="muted small">{new Date(t.at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                  {t.rank && <span className="muted small">{t.rank}</span>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted small">No measurements yet. Add weight, length or head size from Log &gt; Growth.</p>
+          )}
+        </section>
       )}
 
       {p.on('totals') && (
@@ -243,6 +297,7 @@ export function Today(p: Props) {
             <b>{formatMinutes(p.day.sleepMinutes)}</b> / {p.sleepGoalHours}h goal
           </span>
         </div>
+        {p.sleepGoalNote && <p className="muted small">{p.sleepGoalNote}</p>}
         <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={sleepGoalMin} aria-valuenow={p.day.sleepMinutes}>
           <span style={{ width: `${Math.min(100, (p.day.sleepMinutes / sleepGoalMin) * 100)}%` }} />
         </div>
