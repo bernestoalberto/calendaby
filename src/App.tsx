@@ -39,6 +39,7 @@ import { Sheet } from './ui/controls'
 import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
+import type { GrowthRef, Sex } from './domain/growthReference'
 import { Growth } from './ui/Growth'
 import type { LogTab } from './ui/Logger'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
@@ -92,6 +93,8 @@ export default function App() {
   return <Tracker store={store} />
 }
 
+const toSex = (v: string | undefined): Sex | undefined => (v === 'girl' || v === 'boy' ? v : undefined)
+
 function Tracker({ store }: { store: SqliteEventStore }) {
   const account = useAccount()
   const [events, setEvents] = useState(() => store.list())
@@ -99,6 +102,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [caregiver, setCaregiver] = useState(() => store.setting('caregiver') ?? account.name ?? 'Parent')
   const [baby, setBaby] = useState(() => store.setting('baby') ?? '')
   const [birth, setBirth] = useState(() => store.setting('birth') ?? '')
+  const [babySex, setBabySex] = useState<Sex | undefined>(() => toSex(store.setting('babySex')))
+  const [growthRef, setGrowthRef] = useState<GrowthRef[]>([])
   const [unit, setUnit] = useState<Unit>(() => (store.setting('unit') === 'ml' ? 'ml' : 'oz'))
   const [lists, setLists] = useState(() => store.allOptions())
   const [sleepGoalHours, setSleepGoalHours] = useState(() => numberSetting(store.setting('sleepGoalHours'), DEFAULT_SETTINGS.sleepGoalHours, 1))
@@ -141,9 +146,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const lastGmailCheck = useRef(0)
   /** The settings the whole family shares; another caregiver may have changed them. */
   const loadShared = useCallback(async () => {
-    const [name, born, goal] = await Promise.all([store.getSetting('baby'), store.getSetting('birth'), store.getSetting('tummyGoal')])
+    const [name, born, goal, sex] = await Promise.all([store.getSetting('baby'), store.getSetting('birth'), store.getSetting('tummyGoal'), store.getSetting('babySex')])
     if (name) setBaby(name)
     setBirth(born ?? '')
+    setBabySex(toSex(sex))
     const minutes = Number(goal)
     if (goal && Number.isFinite(minutes) && minutes >= 0) setTummyGoal(minutes)
   }, [store])
@@ -178,6 +184,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       setAnalytics(v === 'on')
     })
     void store.listAgeNorms().then(setAgeNorms)
+    void store.listGrowthReference().then(setGrowthRef)
     void store.getSetting('appointments').then((v) => {
       const parsed = AppointmentSchema.array().safeParse(v ? JSON.parse(v) : [])
       if (!parsed.success) return
@@ -484,12 +491,13 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     if ((await shareText(title, body)) === 'copied') setToast({ text: 'Copied to clipboard' })
   }
 
-  function setSetting(key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) {
+  function setSetting(key: 'baby' | 'birth' | 'babySex' | 'caregiver' | 'briefingTime', value: string) {
     if (key === 'baby') setBaby(value)
+    if (key === 'babySex') setBabySex(toSex(value))
     if (key === 'birth') setBirth(value)
     if (key === 'caregiver') setCaregiver(value)
     if (key === 'briefingTime') setBriefingTime(value)
-    void store.setSetting(key, value).then(() => (key === 'baby' || key === 'birth') && sync.soon())
+    void store.setSetting(key, value).then(() => (key === 'baby' || key === 'birth' || key === 'babySex') && sync.soon())
   }
 
   function changeTheme(next: Theme) {
@@ -704,6 +712,10 @@ function Tracker({ store }: { store: SqliteEventStore }) {
                 baby={baby}
                 events={events}
                 unit={unit}
+                now={now}
+                birth={birth || undefined}
+                sex={babySex}
+                reference={growthRef}
                 onAdd={() => {
                   setLogTab('growth')
                   setTab('log')
@@ -736,6 +748,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             now={now}
             baby={baby}
             birth={birth}
+            sex={babySex ?? ''}
             caregiver={caregiver}
             unit={unit}
             theme={theme}

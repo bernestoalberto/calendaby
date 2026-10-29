@@ -1,6 +1,7 @@
 import { DEFAULT_ACTIVITY_TYPES } from './activities'
 import { DEFAULT_AGE_NORMS } from './ageNorms'
 import { DEFAULT_FEATURES } from './features'
+import { WHO_GROWTH_REFERENCE } from './growthReference'
 import { DEFAULT_LISTS, DEFAULT_SETTINGS, OPTION_LISTS } from './options'
 
 /**
@@ -39,6 +40,14 @@ export const SEEDS: Seed[] = [
     statements: [
       `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'growth', 'Growth', 'Weight, length and head size', 'Log', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
     ],
+  },
+  {
+    id: 'growthRef-v1',
+    since: Infinity,
+    statements: WHO_GROWTH_REFERENCE.map(
+      ([sex, kind, month, l, m, sd]) =>
+        `INSERT OR IGNORE INTO growth_reference (sex, kind, month, l, m, s) VALUES (${sqlText(sex)}, ${sqlText(kind)}, ${month}, ${l}, ${m}, ${sd})`,
+    ),
   },
   {
     id: 'activityTypes-v1',

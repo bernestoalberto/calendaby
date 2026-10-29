@@ -10,6 +10,7 @@ import { analyticsAvailable } from '../analytics'
 import { Family } from './Family'
 import type { SyncStatus } from './useSync'
 import { FaceIcon, MoonIcon, ShareIcon } from './icons'
+import { SEX_CHOICES } from '../domain/growth'
 import { babyAge, type Unit } from './time'
 
 interface Props {
@@ -19,6 +20,8 @@ interface Props {
   now: number
   baby: string
   birth: string
+  /** 'girl', 'boy' or '' when not set; only used to show WHO growth percentiles. */
+  sex: string
   caregiver: string
   unit: Unit
   lists: Record<ListId, string[]>
@@ -38,7 +41,7 @@ interface Props {
   reminders: boolean
   briefingTime: string
   notifAccess: NotificationAccess
-  onSetting: (key: 'baby' | 'birth' | 'caregiver' | 'briefingTime', value: string) => void
+  onSetting: (key: 'baby' | 'birth' | 'babySex' | 'caregiver' | 'briefingTime', value: string) => void
   onUnit: (u: Unit) => void
   analytics: boolean
   onToggleAnalytics: () => void
@@ -80,6 +83,17 @@ export function Profile(p: Readonly<Props>) {
         <label className="field">
           <span className="field-label">Birth date</span>
           <input type="date" defaultValue={p.birth} max={new Date(p.now).toISOString().slice(0, 10)} onChange={(e) => p.onSetting('birth', e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field-label">Sex (for growth charts, optional)</span>
+          <select value={p.sex} onChange={(e) => p.onSetting('babySex', e.target.value)}>
+            <option value="">Not set</option>
+            {SEX_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </label>
       </section>
 

@@ -4,6 +4,7 @@ import { BabyEvent, type DraftEvent } from './events'
 import { activityId, type ActivityType } from './activities'
 import type { AgeNorm } from './ageNorms'
 import type { FeatureRow } from './features'
+import type { GrowthRef } from './growthReference'
 import { DEFAULT_LISTS, OPTION_LISTS, optionProblem, type ListId } from './options'
 import { SEEDS, type Seed } from './seeds'
 import { isSharedKey, SHARED_KEYS, type SettingChange, type SharedSetting } from './sharedSettings'
@@ -41,7 +42,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 10
+const SCHEMA_VERSION = 11
 
 // An entry this phone already had keeps its origin; the server also sends back what this phone uploaded.
 const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at, remote)
@@ -130,7 +131,21 @@ const MIGRATIONS: Record<number, string[]> = {
   // 1 for an entry that first arrived from another caregiver's phone, so leaving a family can drop those and keep its own.
   // Entries already on a phone count as its own, because their origin was never recorded.
   10: ['ALTER TABLE events ADD COLUMN remote INTEGER NOT NULL DEFAULT 0'],
+  // The WHO growth standards (LMS parameters), planted by the growthRef seed.
+  11: [
+    `CREATE TABLE IF NOT EXISTS growth_reference (
+      sex TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      month INTEGER NOT NULL,
+      l REAL NOT NULL,
+      m REAL NOT NULL,
+      s REAL NOT NULL,
+      PRIMARY KEY (sex, kind, month)
+    )`,
+  ],
 }
+
+const LIST_GROWTH_REFERENCE_SQL = 'SELECT sex, kind, month, l, m, s FROM growth_reference ORDER BY sex, kind, month'
 
 /** What a phone has to send: events to upload, ids to delete, and the outbox rows these came from. */
 export interface PendingBatch {
@@ -393,6 +408,11 @@ export class SqliteEventStore implements EventStore {
     await this.reloadEvents()
     await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
     await this.db.exec('UPDATE shared_setting SET version = version + 1, fill = 1')
+  }
+
+  async listGrowthReference(): Promise<GrowthRef[]> {
+    const rows = await this.db.query<{ sex: GrowthRef[0]; kind: GrowthRef[1]; month: number; l: number; m: number; s: number }>(LIST_GROWTH_REFERENCE_SQL)
+    return rows.map((r) => [r.sex, r.kind, r.month, r.l, r.m, r.s])
   }
 
   async listFeatures(): Promise<FeatureRow[]> {

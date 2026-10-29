@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { BabyEvent } from '../domain/events'
-import { bodyUnits, formatMeasure, latest, MEASURES, series, type Measure, type MeasurePoint } from '../domain/growth'
+import { ageInMonths, bodyUnits, formatMeasure, latest, MAX_REFERENCE_MONTHS, MEASURES, percentile, percentileText, series, type Measure, type MeasurePoint } from '../domain/growth'
+import type { GrowthRef, Sex } from '../domain/growthReference'
 import { Badge } from './controls'
 import { PencilIcon, RulerIcon } from './icons'
 import type { Unit } from './time'
@@ -9,6 +10,11 @@ interface Props {
   baby: string
   events: BabyEvent[]
   unit: Unit
+  now: number
+  birth?: string
+  /** Percentiles need the sex from Profile. */
+  sex?: Sex
+  reference: GrowthRef[]
   onAdd: () => void
   onEdit: (events: BabyEvent[]) => void
 }
@@ -33,8 +39,12 @@ function Line({ points, label }: Readonly<{ points: MeasurePoint[]; label: strin
   )
 }
 
-export function Growth({ baby, events, unit, onAdd, onEdit }: Readonly<Props>) {
+export function Growth({ baby, events, unit, now, birth, sex, reference, onAdd, onEdit }: Readonly<Props>) {
   const units = bodyUnits(unit)
+  const rank = (m: Measure, at: number, value: number) => {
+    const p = percentile(reference, sex, m, value, ageInMonths(birth, at))
+    return p === undefined ? undefined : percentileText(p)
+  }
   const measures = useMemo(() => events.filter((e) => e.kind === 'measure').sort((a, b) => b.at - a.at), [events])
   const byMeasure = useMemo(() => MEASURES.map((m) => ({ ...m, points: series(events, m.id) })), [events])
 
@@ -69,6 +79,7 @@ export function Growth({ baby, events, unit, onAdd, onEdit }: Readonly<Props>) {
                     {formatMeasure(id, last.value, units)} <span className="muted small">{day(last.at)}</span>
                   </span>
                 </div>
+                {rank(id, last.at, last.value) && <Badge tone="lilac">{rank(id, last.at, last.value)}</Badge>}
                 {last.change !== undefined && last.days !== undefined && (
                   <Badge tone="sage">{changeText(id, last.change, last.days, units)}</Badge>
                 )}
@@ -90,8 +101,25 @@ export function Growth({ baby, events, unit, onAdd, onEdit }: Readonly<Props>) {
           </ul>
         </>
       )}
+      {measures.length > 0 && <PercentileNote baby={baby} birth={birth} sex={sex} now={now} />}
       <p className="muted small">Measurements are kept as you enter them. Ask your pediatrician what they mean for {baby}.</p>
     </section>
+  )
+}
+
+function PercentileNote({ baby, birth, sex, now }: Readonly<{ baby: string; birth?: string; sex?: Sex; now: number }>) {
+  if (!sex) return <p className="muted small">Set {baby}&apos;s sex in Profile to see where each reading falls on the WHO growth standards.</p>
+  if (!birth) return <p className="muted small">Add {baby}&apos;s birth date in Profile to see WHO percentiles.</p>
+  const months = ageInMonths(birth, now)
+  if (months !== undefined && months > MAX_REFERENCE_MONTHS) return <p className="muted small">WHO percentiles here stop at 24 months.</p>
+  return (
+    <p className="muted small">
+      Percentiles use the WHO growth standards (
+      <a href="https://www.cdc.gov/growthcharts/who-data-files.htm" target="_blank" rel="noreferrer">
+        data
+      </a>
+      ) for the age on the day. They are not a diagnosis.
+    </p>
   )
 }
 

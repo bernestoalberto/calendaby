@@ -27,6 +27,22 @@ class MapStorage implements Storage {
 }
 
 describe('SqliteEventStore', () => {
+  it('plants the WHO growth standards once and returns them as stored', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    const rows = await store.listGrowthReference()
+    expect(rows).toHaveLength(150)
+    expect(rows.find((r) => r[0] === 'boy' && r[1] === 'weight' && r[2] === 0)).toEqual(['boy', 'weight', 0, 0.3487, 3.3464, 0.14602])
+    expect(await (await SqliteEventStore.open(db)).listGrowthReference()).toHaveLength(150)
+  })
+
+  it('shares the baby sex with the family', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    await store.setSetting('babySex', 'girl')
+    expect(store.setting('babySex')).toBe('girl')
+    expect((await store.pendingSettings()).changes).toMatchObject([{ key: 'babySex', value: 'girl' }])
+  })
+
   it('keeps a measurement and offers the Growth switch', async () => {
     const db = new NodeSqlDriver()
     const store = await SqliteEventStore.open(db)

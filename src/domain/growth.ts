@@ -1,4 +1,5 @@
 import type { BabyEvent } from './events.js'
+import type { GrowthRef, Sex } from './growthReference.js'
 
 export type MeasureEvent = Extract<BabyEvent, { kind: 'measure' }>
 export type Measure = 'weight' | 'length' | 'head'
@@ -95,3 +96,61 @@ export function measureDraft(text: MeasureText, units: BodyUnits): { weightG?: n
 }
 
 export const hasMeasure = (text: MeasureText, units: BodyUnits): boolean => Object.values(measureDraft(text, units)).some((v) => v !== undefined)
+
+const DAY_MS = 86_400_000
+const MONTH_DAYS = 30.4375
+/** The WHO standards used here stop at 24 months. */
+export const MAX_REFERENCE_MONTHS = 24
+
+/** Age in months (with a fraction) on `at`, from a YYYY-MM-DD birth date; undefined when missing or after `at`. */
+export function ageInMonths(birth: string | undefined, at: number): number | undefined {
+  if (!birth) return undefined
+  const days = (at - new Date(`${birth}T00:00`).getTime()) / DAY_MS
+  return Number.isNaN(days) || days < 0 ? undefined : days / MONTH_DAYS
+}
+
+/** Standard normal cumulative distribution (Abramowitz and Stegun 7.1.26, error under 2e-7). */
+function normalCdf(z: number): number {
+  const t = 1 / (1 + 0.3275911 * (Math.abs(z) / Math.SQRT2))
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
+  const erf = 1 - poly * Math.exp(-(z * z) / 2)
+  return z >= 0 ? (1 + erf) / 2 : (1 - erf) / 2
+}
+
+/**
+ * Where a reading falls among babies of the same age and sex, from 0 to 100, using the WHO growth standards (LMS method).
+ * Undefined when the sex or age is unknown, the baby is past 24 months, or the reference has no rows for it.
+ */
+export function percentile(
+  rows: GrowthRef[],
+  sex: Sex | undefined,
+  measure: Measure,
+  stored: number,
+  months: number | undefined,
+): number | undefined {
+  if (!sex || months === undefined || months > MAX_REFERENCE_MONTHS) return undefined
+  const at = (month: number) => rows.find((r) => r[0] === sex && r[1] === measure && r[2] === month)
+  const lo = at(Math.floor(months))
+  const hi = at(Math.min(MAX_REFERENCE_MONTHS, Math.floor(months) + 1))
+  if (!lo || !hi) return undefined
+  const f = months - lo[2]
+  const mix = (a: number, b: number) => a + (b - a) * f
+  const [l, m, s] = [mix(lo[3], hi[3]), mix(lo[4], hi[4]), mix(lo[5], hi[5])]
+  const x = measure === 'weight' ? stored / 1000 : stored / 10
+  const z = l === 0 ? Math.log(x / m) / s : ((x / m) ** l - 1) / (l * s)
+  return normalCdf(z) * 100
+}
+
+/** "50th percentile", "under the 1st percentile", "over the 99th percentile". */
+export function percentileText(p: number): string {
+  const n = Math.round(p)
+  const ordinal = (k: number) => `${k}${[11, 12, 13].includes(k % 100) ? 'th' : (['th', 'st', 'nd', 'rd'][k % 10] ?? 'th')}`
+  if (n < 1) return 'under the 1st percentile'
+  if (n > 99) return 'over the 99th percentile'
+  return `${ordinal(n)} percentile`
+}
+
+export const SEX_CHOICES: { value: Sex; label: string }[] = [
+  { value: 'girl', label: 'Girl' },
+  { value: 'boy', label: 'Boy' },
+]

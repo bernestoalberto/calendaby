@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** The settings every caregiver in a household sees. Everything else (theme, units, reminders) stays on the phone. */
-export const SHARED_KEYS = ['baby', 'birth', 'tummyGoal'] as const
+export const SHARED_KEYS = ['baby', 'birth', 'tummyGoal', 'babySex'] as const
 export type SharedKey = (typeof SHARED_KEYS)[number]
 
 export function isSharedKey(key: string): key is SharedKey {
@@ -12,6 +12,7 @@ const RULES: Record<SharedKey, z.ZodType<string>> = {
   baby: z.string().trim().min(1).max(40),
   birth: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
   tummyGoal: z.string().regex(/^\d{1,3}$/),
+  babySex: z.enum(['', 'girl', 'boy']),
 }
 
 const Key = z.enum(SHARED_KEYS)
