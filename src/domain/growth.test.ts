@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseLog } from '../agents/capture'
 import { DraftEventSchema, type BabyEvent } from './events'
-import { ageInMonths, bodyUnits, formatMeasure, latest, measureInputText, parseMeasureInput, percentile, percentileText, series, type Measure } from './growth'
+import { ageInMonths, bodyUnits, formatMeasure, latest, measureInputText, parseMeasureInput, growthReport, percentile, percentileText, series, type Measure, type MeasureEvent } from './growth'
 import { WHO_GROWTH_REFERENCE, type Sex } from './growthReference'
 
 const now = new Date('2026-10-29T14:00:00')
@@ -122,5 +122,30 @@ describe('WHO percentiles', () => {
     expect(percentileText(11)).toBe('11th percentile')
     expect(percentileText(0.2)).toBe('under the 1st percentile')
     expect(percentileText(99.8)).toBe('over the 99th percentile')
+  })
+})
+
+describe('growthReport', () => {
+  const read = (id: string, at: string, weightG?: number, headMm?: number): MeasureEvent => ({ id, kind: 'measure', at: Date.parse(at), loggedBy: 'a', weightG, headMm })
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+  it('gives metric values, the change since the last reading and WHO percentiles', () => {
+    const report = growthReport([read('1', '2026-02-01T12:00:00Z', 3346), read('2', '2026-03-03T12:00:00Z', 4471, 365)], 'boy', '2026-02-01', WHO_GROWTH_REFERENCE, day)
+    const weight = report.lines.find((l) => l.measure === 'weight')
+    expect(weight).toMatchObject({ unit: 'kg', latest: { date: '2026-03-03', value: 4.47 }, previous: { value: 3.35, daysBefore: 30 } })
+    expect(weight?.latest.percentile).toBeGreaterThan(40)
+    expect(weight?.latest.percentile).toBeLessThan(60)
+    expect(report.lines.find((l) => l.measure === 'head')).toMatchObject({ unit: 'cm', latest: { value: 36.5 } })
+    expect(report.percentiles).toBe('WHO growth standards')
+  })
+
+  it('says percentiles are unavailable without the sex, and still gives the readings', () => {
+    const report = growthReport([read('1', '2026-03-03T12:00:00Z', 4471)], undefined, '2026-02-01', WHO_GROWTH_REFERENCE, day)
+    expect(report.lines[0].latest).toEqual({ date: '2026-03-03', value: 4.47, ageMonths: 1 })
+    expect(report.percentiles).toMatch(/^not available/)
+  })
+
+  it('is empty when nothing was measured', () => {
+    expect(growthReport([], 'girl', '2026-02-01', WHO_GROWTH_REFERENCE, day).lines).toEqual([])
   })
 })

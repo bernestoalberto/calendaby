@@ -2110,3 +2110,18 @@ main:focus {
   letter-spacing: 0.12em;
   font-variant-numeric: tabular-nums;
 }
+
+.growth-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.growth-link svg:last-child {
+  margin-left: auto;
+}

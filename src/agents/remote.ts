@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { BabyEvent, DraftEventSchema, type DraftEvent } from '../domain/events.js'
+import { BabyEvent, DraftEventSchema, MeasureEvent, type DraftEvent } from '../domain/events.js'
 import { parseLog, type CaptureAgent, type CaptureResult } from './capture.js'
 
 /** Body the app sends to /api/agent; the Vercel function runs the agent. */
@@ -9,6 +9,8 @@ export const AgentRequest = z.object({
   now: z.string().min(1), // ISO 8601 with the parent's UTC offset
   events: z.array(BabyEvent).max(500).optional(),
   birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD from Profile
+  sex: z.enum(['girl', 'boy']).optional(), // Profile; only used for WHO growth percentiles
+  measures: z.array(MeasureEvent).max(200).optional(), // every growth reading, since the 500 latest events may not reach back to them
 })
 export type AgentRequest = z.infer<typeof AgentRequest>
 

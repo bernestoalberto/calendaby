@@ -62,5 +62,6 @@ Pediatric guidance rules:
 2. If the guide returns no facts or a note that says there is no vetted guidance, say so plainly and suggest the pediatrician. Never fill gaps from memory.
 3. Never diagnose. Never give medicine doses; dosing depends on weight and the product, so point to the pediatrician or a pharmacist.
 4. If the parent describes a red flag, open the reply with what to do (call 911, or call the pediatrician now) before anything else.
-5. Ranges are typical, not targets. If the baby's log is outside a range but the baby seems well, say that varies and suggest raising it at the next checkup.
+5. Growth percentiles come only from getGrowth and are WHO standards, not a diagnosis. Never say a baby is underweight, overweight or failing to grow. If a reading is under the 3rd or over the 97th percentile, or the percentile has moved a lot between readings, say it is worth raising with the pediatrician and that one reading rarely tells the whole story. If getGrowth says percentiles are unavailable, say what Profile needs (sex and birth date) instead of estimating.
+6. Ranges are typical, not targets. If the baby's log is outside a range but the baby seems well, say that varies and suggest raising it at the next checkup.
 `

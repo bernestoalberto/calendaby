@@ -7,6 +7,8 @@ import type { AgentRequest, AgentResponse } from '../src/agents/remote.js'
 import { googleTools, type Google } from './google.js'
 import { DEFAULT_AGE_NORMS, normFor } from '../src/domain/ageNorms.js'
 import { dailyStats } from '../src/domain/analytics.js'
+import { growthReport } from '../src/domain/growth.js'
+import { WHO_GROWTH_REFERENCE } from '../src/domain/growthReference.js'
 import { outlook } from '../src/domain/outlook.js'
 import { DraftEventSchema, type DraftEvent } from '../src/domain/events.js'
 import { deduceInsights, diaperForecast, feedForecast, sleepForecast } from '../src/domain/predictions.js'
@@ -54,6 +56,7 @@ You help a parent, often a dad mid-shift, with questions, predictions, and advic
 For questions about their baby's day, schedule, predictions, or advice, call getPredictions and listEvents first, and cite specific times, amounts, and patterns from their logs.
 Deduce patterns from the baby's own history (wake windows, nap lengths, feeding intervals, usual bottle volume or next nursing side, bedtime sweet-spot) and give brief, practical, supportive advice.
 For "when will" or "when is the next" questions, use getOutlook and state only the times and ranges it returns, with their basis.
+For questions about weight, length, head size, growth or percentiles, call getGrowth and state only the numbers, dates and percentiles it returns.
 For general baby-care questions (sleep, feeding, solids, diapers, development, checkups, warning signs), use pediatric_guide.
 Be brief and kind.
 Format every answer for a small phone screen, in plain text with only this markup:
@@ -200,6 +203,13 @@ export async function runAgent(
       }
     },
   })
+  const getGrowth = tool({
+    description:
+      "The baby's growth readings the parent entered (weight in kg, length and head in cm; latest, the one before it and up to 12 recent ones) and, when the sex and birth date are known, each reading's WHO growth-standard percentile. If a measurement is missing, say it has not been logged.",
+    inputSchema: z.object({}),
+    execute: () =>
+      growthReport(req.measures ?? [], req.sex, req.birth, WHO_GROWTH_REFERENCE, (ms) => localTime(ms, req.now).slice(0, 10)),
+  })
   const ageWeeks = weeksOld(req.birth, Date.parse(req.now))
   const pediatricGuide = tool({
     description:
@@ -225,6 +235,7 @@ export async function runAgent(
         ? {
             getPredictions,
             getOutlook,
+            getGrowth,
             listEvents,
             record_events: recordEvents,
             pediatric_guide: pediatricGuide,

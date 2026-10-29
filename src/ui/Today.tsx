@@ -12,7 +12,7 @@ import {
   BottleIcon,
   BreastIcon,
   BulbIcon,
-  ChevronRightIcon,
+  ChevronRightIcon, RulerIcon,
   DiaperIcon,
   FaceIcon,
   MicIcon,
@@ -59,6 +59,7 @@ interface Props {
   onToggleSleep: () => void
   onQuick: (k: QuickKind) => void
   onFullStats: () => void
+  onGrowth: () => void
   onShareHandoff: () => void
   onAsk: (prompt?: string) => void
 }
@@ -213,6 +214,12 @@ export function Today(p: Props) {
           />
         )}
       </div>
+      )}
+
+      {p.on('growth') && p.on('analytics') && (
+        <button type="button" className="card growth-link" onClick={p.onGrowth}>
+          <RulerIcon width={18} height={18} /> Growth: weight, length and head <ChevronRightIcon width={16} height={16} />
+        </button>
       )}
 
       {p.on('totals') && (

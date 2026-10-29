@@ -461,6 +461,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         prompt: q,
         now: isoWithOffset(new Date(nowMs())),
         birth: birth || undefined,
+        sex: babySex,
+        measures: events.filter((e) => e.kind === 'measure').slice(-200),
         events: events.slice(-500),
       })
       const { added } = await logAll(res.drafts)
@@ -661,6 +663,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onToggleSleep={toggleSleep}
             onQuick={openLog}
             onFullStats={() => setTab('analytics')}
+            onGrowth={() => setTab('analytics')}
             onShareHandoff={() => setSheet('handoff')}
             onAsk={(prompt) => {
               setTab('agent')

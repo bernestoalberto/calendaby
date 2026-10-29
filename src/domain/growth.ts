@@ -154,3 +154,68 @@ export const SEX_CHOICES: { value: Sex; label: string }[] = [
   { value: 'girl', label: 'Girl' },
   { value: 'boy', label: 'Boy' },
 ]
+
+export interface GrowthReading {
+  date: string
+  value: number
+  /** Where it falls among babies of that age and sex (0 to 100), when the sex and birth date are known and the baby is under 24 months. */
+  percentile?: number
+  ageMonths?: number
+}
+
+export interface GrowthLine {
+  measure: Measure
+  unit: 'kg' | 'cm'
+  latest: GrowthReading
+  /** The reading before the latest one, with the days between them. */
+  previous?: GrowthReading & { daysBefore: number }
+  /** Up to the last 12 readings, oldest first. */
+  history: GrowthReading[]
+}
+
+export interface GrowthReport {
+  lines: GrowthLine[]
+  percentiles: 'WHO growth standards' | 'not available: needs the baby sex and birth date, and a baby under 24 months'
+}
+
+const round = (n: number, places: number) => Math.round(n * 10 ** places) / 10 ** places
+
+/**
+ * What the assistant may say about growth: the readings the parent entered (metric) and, when it can, the WHO percentile
+ * of each. Pure data, so a model reply can be checked against it and a test can pin it.
+ */
+export function growthReport(
+  readings: MeasureEvent[],
+  sex: Sex | undefined,
+  birth: string | undefined,
+  reference: GrowthRef[],
+  dateOf: (ms: number) => string,
+): GrowthReport {
+  let anyPercentile = false
+  const lines: GrowthLine[] = []
+  for (const measure of ['weight', 'length', 'head'] as const) {
+    const points = series(readings, measure)
+    if (points.length === 0) continue
+    const reading = (p: MeasurePoint): GrowthReading => {
+      const months = ageInMonths(birth, p.at)
+      const rank = percentile(reference, sex, measure, p.value, months)
+      if (rank !== undefined) anyPercentile = true
+      return {
+        date: dateOf(p.at),
+        value: round(measure === 'weight' ? p.value / 1000 : p.value / 10, measure === 'weight' ? 2 : 1),
+        ...(rank === undefined ? {} : { percentile: round(rank, 0) }),
+        ...(months === undefined ? {} : { ageMonths: round(months, 1) }),
+      }
+    }
+    const last = points.at(-1) as MeasurePoint
+    const before = points.at(-2)
+    lines.push({
+      measure,
+      unit: measure === 'weight' ? 'kg' : 'cm',
+      latest: reading(last),
+      ...(before ? { previous: { ...reading(before), daysBefore: Math.max(1, Math.round((last.at - before.at) / 86_400_000)) } } : {}),
+      history: points.slice(-12).map(reading),
+    })
+  }
+  return { lines, percentiles: anyPercentile ? 'WHO growth standards' : 'not available: needs the baby sex and birth date, and a baby under 24 months' }
+}
