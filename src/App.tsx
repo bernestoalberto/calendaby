@@ -39,6 +39,7 @@ import { Sheet } from './ui/controls'
 import { EditSheet, type EventEdit } from './ui/EditSheet'
 import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon, TodayIcon } from './ui/icons'
 import { eventTitle } from './ui/kinds'
+import { Growth } from './ui/Growth'
 import type { LogTab } from './ui/Logger'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
 import { babyAge, type Unit } from './ui/time'
@@ -697,7 +698,21 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           />
         )}
         {tab === 'analytics' && on('analytics') && (
-          <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
+          <>
+            {on('growth') && (
+              <Growth
+                baby={baby}
+                events={events}
+                unit={unit}
+                onAdd={() => {
+                  setLogTab('growth')
+                  setTab('log')
+                }}
+                onEdit={setEditing}
+              />
+            )}
+            <Analytics events={events} now={now} unit={unit} baby={baby} onShare={(body) => void share(`${baby} summary`, body)} />
+          </>
         )}
         {tab === 'calendar' && on('calendar') && (
           <Calendar

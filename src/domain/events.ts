@@ -66,6 +66,20 @@ export const PumpEvent = z.object({
   durationMin: z.number().int().positive().max(240).optional(),
 })
 
+/** Head, length and weight, stored metric. The ranges cover a baby up to 3 years old. */
+const MeasureBase = z.object({
+  ...base,
+  kind: z.literal('measure'),
+  weightG: z.number().int().min(500).max(25_000).optional(),
+  lengthMm: z.number().int().min(250).max(1_100).optional(),
+  headMm: z.number().int().min(200).max(600).optional(),
+})
+const hasValue = (e: { weightG?: number; lengthMm?: number; headMm?: number }) =>
+  e.weightG !== undefined || e.lengthMm !== undefined || e.headMm !== undefined
+const NEEDS_VALUE = { message: 'Add a weight, length or head size' }
+
+export const MeasureEvent = MeasureBase.refine(hasValue, NEEDS_VALUE)
+
 export const BabyEvent = z.discriminatedUnion('kind', [
   FeedEvent,
   SleepEvent,
@@ -74,6 +88,7 @@ export const BabyEvent = z.discriminatedUnion('kind', [
   NoteEvent,
   ActivityEvent,
   PumpEvent,
+  MeasureEvent,
 ])
 export type BabyEvent = z.infer<typeof BabyEvent>
 export type EventKind = BabyEvent['kind']
@@ -96,4 +111,5 @@ export const DraftEventSchema = z.discriminatedUnion('kind', [
   NoteEvent.omit(omitStored),
   ActivityEvent.omit(omitStored),
   PumpEvent.omit(omitStored),
+  MeasureBase.omit(omitStored).refine(hasValue, NEEDS_VALUE),
 ])

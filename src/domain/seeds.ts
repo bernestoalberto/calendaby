@@ -32,6 +32,14 @@ export const SEEDS: Seed[] = [
         `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i}, ${f.off ? 0 : 1})`,
     ),
   },
+  // A switch added after features-v1 shipped gets its own seed, so phones that ran v1 still receive it.
+  {
+    id: 'features-growth-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'growth', 'Growth', 'Weight, length and head size', 'Log', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
+  },
   {
     id: 'activityTypes-v1',
     since: 4,

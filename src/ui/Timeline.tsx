@@ -4,7 +4,7 @@ import type { BabyEvent } from '../domain/events'
 import { sleepSessions, summarizeDay } from '../domain/summary'
 import { formatMinutes } from '../domain/summary'
 import { Badge, Segmented } from './controls'
-import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, PumpIcon, SunIcon, TrashIcon } from './icons'
+import { BottleIcon, BreastIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, DiaperIcon, FaceIcon, MoonIcon, NoteIcon, PencilIcon, PillIcon, PumpIcon, RulerIcon, SunIcon, TrashIcon } from './icons'
 import type { ActivityType } from '../domain/activities'
 import { clock, eventDetail, eventHeading } from './kinds'
 import { duration, type Unit } from './time'
@@ -267,6 +267,8 @@ function kindIcon(e: BabyEvent) {
       return <FaceIcon width={18} height={18} />
     case 'pump':
       return <PumpIcon width={18} height={18} />
+    case 'measure':
+      return <RulerIcon width={18} height={18} />
     default:
       return <NoteIcon width={18} height={18} />
   }

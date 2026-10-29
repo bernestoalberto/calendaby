@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { activityLabel, type ActivityType } from '../domain/activities'
 import { DraftEventSchema, type BabyEvent, type DraftEvent } from '../domain/events'
+import { bodyUnits, EMPTY_MEASURE_TEXT, measureDraft, measureInputText, type MeasureText } from '../domain/growth'
 import { Sheet } from './controls'
 import { eventHeading } from './kinds'
+import { MeasureFields } from './MeasureFields'
 import { fromLocalInput, OZ, toLocalInput, type Unit } from './time'
 
 export interface EventEdit {
@@ -56,6 +58,11 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
   const [minutes, setMinutes] = useState(first.kind === 'activity' || first.kind === 'pump' ? String(first.durationMin ?? '') : '')
   const [pumpAmount, setPumpAmount] = useState(first.kind === 'pump' ? toDisplay(first.amountMl, unit) : '')
   const [pumpSide, setPumpSide] = useState(first.kind === 'pump' ? (first.side ?? '') : '')
+  const [growth, setGrowth] = useState<MeasureText>(() =>
+    first.kind === 'measure'
+      ? { weight: measureInputText('weight', first.weightG, bodyUnits(unit)), length: measureInputText('length', first.lengthMm, bodyUnits(unit)), head: measureInputText('head', first.headMm, bodyUnits(unit)) }
+      : EMPTY_MEASURE_TEXT,
+  )
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
 
@@ -81,6 +88,7 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
         if (e.kind === 'diaper') draft = { ...draft, contents }
         if (e.kind === 'med') draft = { ...draft, name: name.trim(), doseMl: toMl(dose, 'ml') }
         if (e.kind === 'activity') draft = { ...draft, type: activity, durationMin: toInt(minutes) }
+        if (e.kind === 'measure') draft = { ...draft, ...measureDraft(growth, bodyUnits(unit)) }
         if (e.kind === 'pump') {
           draft = { ...draft, amountMl: toMl(pumpAmount, unit), side: pumpSide || undefined, durationMin: toInt(minutes) }
         }
@@ -219,6 +227,8 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
             </label>
           </>
         )}
+
+        {first.kind === 'measure' && <MeasureFields text={growth} units={bodyUnits(unit)} onChange={setGrowth} />}
 
         <label className="field">
           <span className="field-label">{first.kind === 'note' ? 'Note' : 'Note (optional)'}</span>

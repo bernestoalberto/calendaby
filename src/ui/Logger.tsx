@@ -2,6 +2,7 @@ import type { ListId } from '../domain/options'
 import { useState } from 'react'
 import type { ActivityType } from '../domain/activities'
 import type { DraftEvent } from '../domain/events'
+import { bodyUnits, EMPTY_MEASURE_TEXT, hasMeasure, measureDraft, type MeasureText } from '../domain/growth'
 import { elapsed, lastSide, nursingDraft, switchSide, toggle, EMPTY_TIMER, type NursingTimer, type Side } from '../domain/nursing'
 import type { SleepSession } from '../domain/summary'
 import { Badge, Segmented, TagChips } from './controls'
@@ -20,16 +21,18 @@ import {
   PlayIcon,
   PlusIcon,
   PumpIcon,
+  RulerIcon,
   StopIcon,
   SwapIcon,
 } from './icons'
 import { clock } from './kinds'
+import { MeasureFields } from './MeasureFields'
 import { duration, fromLocalInput, OZ, stopwatch, toLocalInput, type Unit } from './time'
 
 // Kept out of render so the component stays pure.
 const nowMs = () => Date.now()
 
-export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump'
+export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump' | 'growth'
 
 const STEP = { oz: 0.5, ml: 10 }
 const MAX = { oz: 12, ml: 360 }
@@ -85,6 +88,8 @@ export function Logger(p: Props) {
   const [newActivity, setNewActivity] = useState('')
   const [pumpAmount, setPumpAmount] = useState('')
   const [pumpSide, setPumpSide] = useState<'left' | 'right' | 'both' | null>(null)
+  const [growth, setGrowth] = useState<MeasureText>(EMPTY_MEASURE_TEXT)
+  const units = bodyUnits(p.unit)
 
   const nursing = nursingDraft(p.timer, p.now)
   const startMs = fromLocalInput(start)
@@ -100,6 +105,7 @@ export function Logger(p: Props) {
     setMinutes('')
     setPumpAmount('')
     setPumpSide(null)
+    setGrowth(EMPTY_MEASURE_TEXT)
     setStart('')
     setEnd('')
     setAdjust(false)
@@ -139,6 +145,7 @@ export function Logger(p: Props) {
       const amountMl = value > 0 ? Math.round(p.unit === 'oz' ? value * OZ : value) : undefined
       drafts.push({ kind: 'pump', at, amountMl, side: pumpSide ?? undefined, durationMin: toMinutes(minutes), ...withNote([], note) })
     }
+    if (p.tab === 'growth' && hasMeasure(growth, units)) drafts.push({ kind: 'measure', at, ...measureDraft(growth, units), ...withNote([], note) })
     if (drafts.length) p.onSave(drafts)
     reset()
   }
@@ -150,9 +157,10 @@ export function Logger(p: Props) {
     (p.tab === 'med' && med.trim() !== '') ||
     (p.tab === 'note' && note.trim() !== '') ||
     (p.tab === 'activity' && activity !== '') ||
-    (p.tab === 'pump' && (Number(pumpAmount) > 0 || toMinutes(minutes) !== undefined))
+    (p.tab === 'pump' && (Number(pumpAmount) > 0 || toMinutes(minutes) !== undefined)) ||
+    (p.tab === 'growth' && hasMeasure(growth, units))
 
-  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note', activity: 'Save Activity', pump: 'Save Pump' }[p.tab]
+  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note', activity: 'Save Activity', pump: 'Save Pump', growth: 'Save Growth' }[p.tab]
   const awake = p.awakeSince !== undefined ? `Awake ${duration(p.now - p.awakeSince)}` : undefined
 
   return (
@@ -187,6 +195,7 @@ export function Logger(p: Props) {
             { value: 'med', label: <><PillIcon width={18} height={18} /> Meds &amp; Health</> },
             ...(p.on('activities') ? [{ value: 'activity' as const, label: <><FaceIcon width={18} height={18} /> Tummy &amp; Play</> }] : []),
             ...(p.on('pumping') ? [{ value: 'pump' as const, label: <><PumpIcon width={18} height={18} /> Pump</> }] : []),
+            ...(p.on('growth') ? [{ value: 'growth' as const, label: <><RulerIcon width={18} height={18} /> Growth</> }] : []),
             { value: 'note', label: <><NoteIcon width={18} height={18} /> Note</> },
           ]}
         />
@@ -459,6 +468,24 @@ export function Logger(p: Props) {
           <label className="field">
             <span className="field-label">Optional note</span>
             <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+        </section>
+      )}
+
+      {p.tab === 'growth' && (
+        <section className="card">
+          <div className="card-head">
+            <h3>
+              <span className="round-icon sage small">
+                <RulerIcon />
+              </span>
+              Growth
+            </h3>
+          </div>
+          <MeasureFields text={growth} units={units} onChange={setGrowth} />
+          <label className="field">
+            <span className="field-label">Optional note</span>
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="At the pediatrician, after a feed…" />
           </label>
         </section>
       )}

@@ -1,8 +1,16 @@
 import { activityLabel, DEFAULT_ACTIVITY_TYPES, type ActivityType } from '../domain/activities'
 import type { BabyEvent } from '../domain/events'
+import { bodyUnits, formatMeasure, MEASURES, measureValue } from '../domain/growth'
 import { formatAmount, type Unit } from './time'
 
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+
+function measureParts(e: Extract<BabyEvent, { kind: 'measure' }>, unit: Unit): string[] {
+  return MEASURES.flatMap((m) => {
+    const value = measureValue(e, m.id)
+    return value === undefined ? [] : [`${m.label} ${formatMeasure(m.id, value, bodyUnits(unit))}`]
+  })
+}
 
 export function eventTitle(e: BabyEvent, unit: Unit = 'ml', types: ActivityType[] = DEFAULT_ACTIVITY_TYPES): string {
   switch (e.kind) {
@@ -22,6 +30,8 @@ export function eventTitle(e: BabyEvent, unit: Unit = 'ml', types: ActivityType[
       return `${activityLabel(types, e.type)}${e.durationMin ? ` · ${e.durationMin}m` : ''}`
     case 'pump':
       return `Pumped${e.amountMl ? ` · ${formatAmount(e.amountMl, unit)}` : ''}`
+    case 'measure':
+      return `Growth · ${measureParts(e, unit).join(', ')}`
   }
 }
 
@@ -41,6 +51,8 @@ export function eventHeading(e: BabyEvent, types: ActivityType[] = DEFAULT_ACTIV
       return activityLabel(types, e.type)
     case 'pump':
       return 'Pumping'
+    case 'measure':
+      return 'Growth'
   }
 }
 
@@ -62,6 +74,8 @@ export function eventDetail(e: BabyEvent, unit: Unit): string {
       const parts = [e.amountMl ? formatAmount(e.amountMl, unit) : '', e.side ? `${titleCase(e.side)} side` : '', e.durationMin ? `${e.durationMin} mins` : '']
       return parts.filter(Boolean).join(' · ') || 'Logged'
     }
+    case 'measure':
+      return measureParts(e, unit).join(' · ')
     default:
       return ''
   }

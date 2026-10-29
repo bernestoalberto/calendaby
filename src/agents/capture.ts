@@ -1,4 +1,4 @@
-import type { DraftEvent } from '../domain/events.js'
+import { DraftEventSchema, type DraftEvent } from '../domain/events.js'
 
 export interface CaptureResult {
   drafts: DraftEvent[]
@@ -36,7 +36,7 @@ export function parseLog(text: string, now: Date): CaptureResult {
     if (found.length === 0) unsure.push(clause)
     drafts.push(...found)
   }
-  return { drafts, unsure }
+  return { drafts: mergeMeasures(drafts), unsure }
 }
 
 function splitClauses(text: string): string[] {
@@ -52,6 +52,8 @@ function parseClause(clause: string, at: number): DraftEvent[] {
 
   const pump = parsePump(c, at)
   if (pump) out.push(pump)
+  const measure = parseMeasure(c, at)
+  if (measure) out.push(measure)
   const activity = parseActivity(c, at)
   if (activity) out.push(activity)
 
@@ -83,6 +85,55 @@ function parseClause(clause: string, at: number): DraftEvent[] {
     out.push({ kind: 'med', at, name: med[1], doseMl: dose ? Number(dose[1]) : undefined })
   }
 
+  return out
+}
+
+const LB_G = 453.592
+const IN_MM = 25.4
+const NUM = String.raw`(\d+(?:[.,]\d+)?)`
+
+/**
+ * "weighed 6.2 kg", "8 lb 11 oz", "62 cm long", "head 41 cm". A unit is required: a bare number is never guessed to be a
+ * weight or a size. A bare "62 cm" is a length and a bare "6 kg" a weight, so "weighed 6.2 kg, 62 cm, head 41 cm" is one entry.
+ * "in" alone is not a unit ("fed 4 in a row"); inches must say inch.
+ */
+const SIZE_UNIT = String.raw`(cm|centimet\w+|inch|inches)\b`
+const HEAD_SIZE = new RegExp(String.raw`head(?:\s+circumference)?\D{0,12}?${NUM}\s*${SIZE_UNIT}`)
+const SIZE = new RegExp(String.raw`${NUM}\s*${SIZE_UNIT}`)
+const KG = new RegExp(String.raw`${NUM}\s*(?:kg|kilos?|kilograms?)\b`)
+const LB = new RegExp(String.raw`${NUM}\s*(?:lbs?|pounds?)\b(?:\s*(?:and\s*)?${NUM}\s*(?:oz|ounces?)\b)?`)
+
+function parseMeasure(c: string, at: number): DraftEvent | undefined {
+  const head = c.match(HEAD_SIZE)
+  const headMm = head ? sizeMm(head[1], head[2]) : undefined
+  const rest = head ? c.replace(head[0], ' ') : c
+  const size = rest.match(SIZE)
+  const kg = rest.match(KG)
+  const lb = rest.match(LB)
+  const decimal = (v: string | undefined) => Number((v ?? '0').replace(',', '.'))
+  const weightG = kg ? Math.round(decimal(kg[1]) * 1000) : lb ? Math.round(decimal(lb[1]) * LB_G + decimal(lb[2]) * (LB_G / 16)) : undefined
+  const lengthMm = size ? sizeMm(size[1], size[2]) : undefined
+  if (weightG === undefined && lengthMm === undefined && headMm === undefined) return undefined
+  const draft = DraftEventSchema.safeParse({ kind: 'measure', at, weightG, lengthMm, headMm })
+  return draft.success ? draft.data : undefined
+}
+
+function sizeMm(value: string, unit: string): number {
+  const n = Number(value.replace(',', '.'))
+  return Math.round(unit.startsWith('c') ? n * 10 : n * IN_MM)
+}
+
+/** Measurements said in separate clauses at one time are one entry. */
+function mergeMeasures(drafts: DraftEvent[]): DraftEvent[] {
+  const out: DraftEvent[] = []
+  for (const d of drafts) {
+    const into = d.kind === 'measure' ? out.find((o) => o.kind === 'measure' && o.at === d.at) : undefined
+    if (into?.kind === 'measure' && d.kind === 'measure') {
+      into.weightG ??= d.weightG
+      into.lengthMm ??= d.lengthMm
+      into.headMm ??= d.headMm
+    } else out.push(d)
+  }
   return out
 }
 

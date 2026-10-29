@@ -27,6 +27,22 @@ class MapStorage implements Storage {
 }
 
 describe('SqliteEventStore', () => {
+  it('keeps a measurement and offers the Growth switch', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    await store.append({ kind: 'measure', at: 1_000_000, weightG: 6200, headMm: 410 }, 'dad')
+    expect(store.list()).toMatchObject([{ kind: 'measure', weightG: 6200, headMm: 410 }])
+    expect((await store.listFeatures()).find((f) => f.id === 'growth')).toMatchObject({ label: 'Growth', enabled: true })
+  })
+
+  it('does not turn the Growth switch back on after a parent turned it off', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    await store.setFeature('growth', false)
+    const again = await SqliteEventStore.open(db)
+    expect((await again.listFeatures()).find((f) => f.id === 'growth')?.enabled).toBe(false)
+  })
+
   it('rejects a duplicate logged by the other caregiver a minute later', async () => {
     const store = await SqliteEventStore.open(new NodeSqlDriver())
     await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')

@@ -60,6 +60,12 @@ export const PumpIcon = (p: IconProps) => (
     <path d="M12 3s6 6.2 6 10.5a6 6 0 0 1-12 0C6 9.2 12 3 12 3z" />
   </Base>
 )
+export const RulerIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 15.5 15.5 3 21 8.5 8.5 21z" />
+    <path d="M7 12l2.5 2.5M10 9l1.5 1.5M13 6l2.5 2.5" />
+  </Base>
+)
 export const NoteIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M5 3h10l4 4v14H5z" />
