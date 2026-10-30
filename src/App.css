@@ -321,6 +321,11 @@ main {
   color: #1b4332;
 }
 
+.pill.danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
 .pill.wide {
   width: 100%;
 }
@@ -414,6 +419,17 @@ main {
   gap: 12px;
   padding: 8px 0;
   font-weight: 600;
+}
+
+.delete-confirm {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: var(--r-tile);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.delete-confirm p {
+  margin: 0;
 }
 
 .field-error {

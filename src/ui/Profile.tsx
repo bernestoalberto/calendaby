@@ -4,6 +4,7 @@ import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
 import { Appearance } from './Appearance'
 import { Customize } from './Customize'
+import { DeleteData } from './DeleteData'
 import type { ListId } from '../domain/options'
 import { Badge, Segmented } from './controls'
 import { analyticsAvailable } from '../analytics'
@@ -45,6 +46,7 @@ interface Props {
   onToggleReminders: () => void
   onTestReminder: () => void
   onHandoff: () => void
+  onDeleteAll: () => Promise<void>
 }
 
 function reminderStatusLabel(reminders: boolean, access: NotificationAccess): string {
@@ -203,6 +205,7 @@ export function Profile(p: Readonly<Props>) {
             ? 'Everything is stored in a private database on this device. Nothing leaves it unless you share it.'
             : 'This browser could not open persistent storage, so logs disappear when the tab closes. Open the app over https or localhost to keep them.'}
         </p>
+        <DeleteData onDelete={p.onDeleteAll} />
       </section>
     </div>
   )

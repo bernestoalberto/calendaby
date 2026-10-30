@@ -36,7 +36,7 @@ async function join(owner: string, joiner: string, name: string) {
 
 describe('household routes', () => {
   it('needs a sign-in for every route', async () => {
-    for (const op of ['householdInfo', 'createInvite', 'pullChanges']) {
+    for (const op of ['householdInfo', 'createInvite', 'pullChanges', 'deleteMyData']) {
       expect((await call(undefined, op, op === 'pullChanges' ? { since: 0 } : {})).status).toBe(401)
     }
   })
@@ -118,6 +118,19 @@ describe('two accounts in one household', () => {
     expect((await call('tok_dad', 'leaveHousehold')).body).toEqual({ left: true })
     const info = await call<{ members: unknown[] }>('tok_mom', 'householdInfo')
     expect(info.body.members).toHaveLength(1)
+  })
+
+  it('deletes what Mom logged alone, and leaves the family log to Dad when they share one', async () => {
+    await call('tok_mom', 'pushChanges', { events: [feed('e1', 10)], deleted: [] })
+    expect((await call('tok_mom', 'deleteMyData')).body).toEqual({ deleted: true })
+    expect((await pull('tok_mom')).body.changes).toEqual([])
+
+    await call('tok_mom', 'pushChanges', { events: [feed('e2', 20)], deleted: [] })
+    await join('tok_mom', 'tok_dad', 'Dad')
+    await call('tok_mom', 'deleteMyData')
+    expect((await pull('tok_dad')).body.changes.map((c) => c.event.id)).toEqual(['e2'])
+    const info = await call<{ role: string; members: unknown[] }>('tok_dad', 'householdInfo')
+    expect(info.body).toMatchObject({ role: 'owner', members: [{ userId: 'user_dad' }] })
   })
 
   it('shows whose household a code belongs to', async () => {
