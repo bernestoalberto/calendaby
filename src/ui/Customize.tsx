@@ -1,17 +1,20 @@
 import { useState } from 'react'
+import { LOG_GAP_CHOICES, parseLogGap, type LogGapSetting } from '../domain/logReminder'
 import { OPTION_LISTS, parseSwatch, type ListId } from '../domain/options'
 
 interface Props {
   lists: Record<ListId, string[]>
   sleepGoalHours: number
   onSleepGoal: (hours: number) => void
+  logGap: LogGapSetting
+  onLogGap: (next: LogGapSetting) => void
   /** Resolves to a message when the value is refused, otherwise nothing. */
   onAdd: (list: ListId, value: string) => Promise<string | undefined>
   onRemove: (list: ListId, value: string) => void
   onRestore: (list: ListId) => void
 }
 
-function ListEditor({ id, label, hint, lists, onAdd, onRemove, onRestore }: Readonly<Omit<Props, 'sleepGoalHours' | 'onSleepGoal'> & { id: ListId; label: string; hint: string }>) {
+function ListEditor({ id, label, hint, lists, onAdd, onRemove, onRestore }: Readonly<Pick<Props, 'lists' | 'onAdd' | 'onRemove' | 'onRestore'> & { id: ListId; label: string; hint: string }>) {
   const [draft, setDraft] = useState('')
   const [problem, setProblem] = useState<string>()
 
@@ -59,7 +62,7 @@ function ListEditor({ id, label, hint, lists, onAdd, onRemove, onRestore }: Read
   )
 }
 
-/** Everything a parent can reshape without a new app version: the quick-pick lists and the sleep goal. */
+/** Everything a parent can reshape without a new app version: the quick-pick lists, the sleep goal and the quiet-stretch reminder. */
 export function Customize(p: Readonly<Props>) {
   return (
     <section className="card">
@@ -80,6 +83,16 @@ export function Customize(p: Readonly<Props>) {
             if (hours >= 1 && hours <= 24) p.onSleepGoal(hours)
           }}
         />
+      </label>
+      <label className="field">
+        <span className="field-label">Remind me when nothing is logged for</span>
+        <select value={String(p.logGap)} onChange={(e) => p.onLogGap(parseLogGap(e.target.value))}>
+          {LOG_GAP_CHOICES.map((c) => (
+            <option key={c} value={String(c)}>
+              {c === 'auto' ? 'Learn from our logs' : c === 'off' ? 'Never' : `${c} hours`}
+            </option>
+          ))}
+        </select>
       </label>
       {OPTION_LISTS.map((l) => (
         <ListEditor key={l.id} id={l.id} label={l.label} hint={l.hint} lists={p.lists} onAdd={p.onAdd} onRemove={p.onRemove} onRestore={p.onRestore} />

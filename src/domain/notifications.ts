@@ -1,5 +1,6 @@
 import { NIGHT_END_HOUR, NIGHT_START_HOUR, type NapForecast } from './analytics.js'
 import type { BabyEvent } from './events.js'
+import type { LogGap } from './logReminder.js'
 import type { Tonight } from './outlook.js'
 import { diaperForecast, feedForecast, sleepForecast, type FeedForecast } from './predictions.js'
 import { formatMinutes, sleepSessions } from './summary.js'
@@ -17,7 +18,8 @@ export const WAKE_SOON_ID = 103
 export const FEED_DUE_ID = 104
 export const DIAPER_CHECK_ID = 105
 export const BRIEFING_ID = 106
-export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID, BRIEFING_ID] as const
+export const NO_LOGS_ID = 107
+export const ALL_ALERT_IDS = [NAP_SOON_ID, NAP_DUE_ID, WAKE_SOON_ID, FEED_DUE_ID, DIAPER_CHECK_ID, BRIEFING_ID, NO_LOGS_ID] as const
 
 /** The `features` row that switches each alert on or off. */
 export const ALERT_FEATURE: Record<number, string> = {
@@ -27,6 +29,7 @@ export const ALERT_FEATURE: Record<number, string> = {
   [FEED_DUE_ID]: 'alertFeed',
   [DIAPER_CHECK_ID]: 'alertDiaper',
   [BRIEFING_ID]: 'alertBriefing',
+  [NO_LOGS_ID]: 'alertNoLogs',
 }
 export const NAP_LEAD_MS = 15 * 60_000
 
@@ -138,4 +141,17 @@ export function briefingAlert(baby: string, time: string, recent: Tonight | unde
     title: `${baby}: good morning`,
     body: `Log the wake-up and Today will lay out the naps, feeds and bedtime ahead.${lately}`,
   }
+}
+
+/** The text of the "nothing logged" reminder at `now`, shared by the notification and the card on Today. */
+export function logGapText(baby: string, gap: LogGap, now: number): { title: string; body: string } {
+  const span = formatMinutes(Math.floor((now - gap.since) / 3_600_000) * 60)
+  return gap.kind === 'today'
+    ? { title: `${baby}: nothing logged today`, body: `No feeds, sleeps or diapers yet today. A quick tap keeps the predictions right.` }
+    : { title: `${baby}: nothing logged for ${span}`, body: `The last log was at ${clockText(gap.since)}. Add what happened since, or a note if all is quiet.` }
+}
+
+/** Fires when a quiet stretch reaches the reminder. Logging anything reschedules it. */
+export function logGapAlert(baby: string, gap: LogGap | undefined, now: number): NapAlert[] {
+  return gap && gap.dueAt > now ? [{ id: NO_LOGS_ID, at: gap.dueAt, ...logGapText(baby, gap, gap.dueAt) }] : []
 }

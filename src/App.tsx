@@ -12,7 +12,8 @@ import type { ActivityType } from './domain/activities'
 import { DEFAULT_SETTINGS, type ListId } from './domain/options'
 import { featureFlags, type FeatureRow } from './domain/features'
 import type { BabyEvent, DraftEvent } from './domain/events'
-import { briefingAlert, smartAlerts } from './domain/notifications'
+import { briefingAlert, logGapAlert, smartAlerts } from './domain/notifications'
+import { isOverdue, logGap, parseLogGap, type LogGapSetting } from './domain/logReminder'
 import { newProposals, proposalAlert } from './domain/newProposals'
 import { visitPrep, type VisitPrep } from './domain/visitPrep'
 import { outlook } from './domain/outlook'
@@ -110,6 +111,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   // Off until a parent turns it on; the choice is kept on the phone like the reminders switch.
   const [shareUsage, setShareUsage] = useState(false)
   const [briefingTime, setBriefingTime] = useState(() => store.setting('briefingTime') ?? DEFAULT_SETTINGS.briefingTime)
+  const [logGapSetting, setLogGapSetting] = useState<LogGapSetting>(() => parseLogGap(store.setting('logGapHours')))
   const [ageNorms, setAgeNorms] = useState<AgeNorm[]>([])
   const [notifAccess, setNotifAccess] = useState<NotificationAccess>('prompt')
   const [timer, setTimer] = useState<NursingTimer>(EMPTY_TIMER)
@@ -214,6 +216,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const lastDone = [...sessions].reverse().find((s) => s.end !== undefined)
   const lastOf = (kind: BabyEvent['kind']) => [...events].reverse().find((e) => e.kind === kind)
   const age = birth ? babyAge(birth, now) : undefined
+  const quiet = useMemo(() => logGap(events, logGapSetting, now), [events, logGapSetting, now])
 
   useEffect(() => {
     const active = reminders && notifAccess === 'granted'
@@ -222,11 +225,12 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       ? [
           ...smartAlerts(baby, events, at, on),
           ...(on('alertBriefing') ? [briefingAlert(baby, briefingTime, view.tonight, at)] : []),
+          ...(on('alertNoLogs') ? logGapAlert(baby, logGap(events, logGapSetting, at), at) : []),
           ...appointmentAlerts(baby, appointments, events, at),
         ]
       : []
     void syncNapNotifications(active, alerts)
-  }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight])
+  }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight, logGapSetting])
 
   const prep = useMemo(() => {
     const out: Record<string, VisitPrep> = {}
@@ -549,6 +553,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
+  function changeLogGap(next: LogGapSetting) {
+    setLogGapSetting(next)
+    void store.setSetting('logGapHours', String(next))
+  }
+
   function changeSleepGoal(hours: number) {
     setSleepGoalHours(hours)
     void store.setSetting('sleepGoalHours', String(hours))
@@ -639,6 +648,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             day={day}
             forecast={forecast}
             outlook={view}
+            logGap={on('logNudge') && isOverdue(quiet, now) ? quiet : undefined}
             checkup={checkup && { ...checkup, around: new Date(`${birth}T00:00`).getTime() + checkup.at * 7 * 86_400_000 }}
             lastFeed={lastOf('feed')}
             lastDiaper={lastOf('diaper')}
@@ -728,6 +738,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             lists={lists}
             sleepGoalHours={sleepGoalHours}
             onSleepGoal={changeSleepGoal}
+            logGap={logGapSetting}
+            onLogGap={changeLogGap}
             onAddOption={addOption}
             onRemoveOption={(list, value) => void removeOption(list, value)}
             onRestoreOptions={(list) => void restoreOptions(list)}

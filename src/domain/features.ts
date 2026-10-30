@@ -29,6 +29,12 @@ export const DEFAULT_FEATURES: (Omit<FeatureRow, 'enabled'> & { off?: boolean })
   { id: 'alertDiaper', label: 'Diaper check', hint: 'After a long stretch with no change', group: 'Notifications', off: true },
 ]
 
+/** Added after `features-v1` shipped; planted by its own seed so phones that already have the first rows get them too. */
+export const FEATURES_V2: typeof DEFAULT_FEATURES = [
+  { id: 'logNudge', label: 'Nothing logged reminder', hint: 'A card on Today after a quiet stretch', group: 'Today' },
+  { id: 'alertNoLogs', label: 'Nothing logged', hint: 'When nothing was logged for a while in the daytime', group: 'Notifications' },
+]
+
 /** Lookup for the UI. A feature the database does not know about counts as on, so a new one never starts hidden. */
 export function featureFlags(rows: FeatureRow[]): (id: string) => boolean {
   const byId = new Map(rows.map((r) => [r.id, r.enabled]))
