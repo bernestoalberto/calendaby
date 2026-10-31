@@ -98,6 +98,14 @@ export async function syncNapNotifications(enabled: boolean, alerts: NapAlert[])
   }
 }
 
+/** Every reminder still waiting, including ones from older app versions whose ids this one no longer knows. */
+export async function cancelAllNotifications(): Promise<void> {
+  clearWebTimers()
+  if (!Capacitor.isNativePlatform()) return
+  const { notifications } = await LocalNotifications.getPending()
+  if (notifications.length > 0) await LocalNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) })
+}
+
 /** Shows one notification right away, for news that should not wait for a schedule. False when it could not be shown. */
 export async function notifyNow(title: string, body: string): Promise<boolean> {
   if (Capacitor.isNativePlatform()) {

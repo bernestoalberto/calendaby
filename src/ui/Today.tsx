@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
+import type { LogGap } from '../domain/logReminder'
+import { logGapText } from '../domain/notifications'
 import { rangeText, tonightText, type Outlook } from '../domain/outlook'
 import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
@@ -46,6 +48,8 @@ interface Props {
   day: DaySummary
   forecast?: NapForecast
   outlook: Outlook
+  /** Set when nothing was logged for longer than the parent's reminder allows. */
+  logGap?: LogGap
   checkup?: Checkup & { around: number }
   lastFeed?: BabyEvent
   lastDiaper?: BabyEvent
@@ -83,6 +87,8 @@ export function Today(p: Props) {
         </span>
         {p.asleep ? <MoonIcon width={18} height={18} /> : <SunIcon width={18} height={18} />}
       </div>
+
+      {p.logGap && <LogGapCard baby={p.baby} gap={p.logGap} now={p.now} onQuick={p.onQuick} />}
 
       {p.on('napForecast') && <NapCard {...p} />}
 
@@ -380,6 +386,33 @@ function QuickRow({ children }: { children: ReactNode }) {
         </button>
       )}
     </div>
+  )
+}
+
+function LogGapCard({ baby, gap, now, onQuick }: { baby: string; gap: LogGap; now: number; onQuick: (k: QuickKind) => void }) {
+  const { title, body } = logGapText(baby, gap, now)
+  return (
+    <section className="card tip" role="status">
+      <span className="tip-icon">
+        <NoteIcon />
+      </span>
+      <div>
+        <p className="eyebrow">Reminder</p>
+        <h3>{title}</h3>
+        <p className="muted">{body}</p>
+        <div className="tip-actions">
+          <button type="button" className="link strong" onClick={() => onQuick('feed')}>
+            Log a feed
+          </button>
+          <button type="button" className="link strong" onClick={() => onQuick('diaper')}>
+            Log a diaper
+          </button>
+          <button type="button" className="link muted" onClick={() => onQuick('note')}>
+            All quiet
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 
