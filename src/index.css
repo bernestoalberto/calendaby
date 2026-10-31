@@ -139,6 +139,11 @@
   box-sizing: border-box;
 }
 
+/* The app is a fixed-width column: a sideways drag must not slide it off-screen. Pinch-zoom stays on. */
+html {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   background: var(--bg);

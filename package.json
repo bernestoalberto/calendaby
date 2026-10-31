@@ -31,6 +31,7 @@
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/share": "^8.0.3",
     "@capgo/capacitor-speech-recognition": "^8.4.4",
+    "@capgo/capacitor-updater": "^8.54.0",
     "@clerk/backend": "^3.26.1",
     "@clerk/react": "^6.18.0",
     "@libsql/client": "^0.18.0",

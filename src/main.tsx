@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { AuthGate } from './ui/AuthGate.tsx'
+import { confirmLiveUpdate } from './liveUpdate.ts'
 import { capturePendingJoin } from './pendingJoin.ts'
 import { setUpServiceWorker } from './pwa.ts'
 
@@ -26,3 +27,8 @@ createRoot(document.getElementById('root')!).render(
     )}
   </StrictMode>,
 )
+
+// Only after the first render is queued: a bundle that throws on start must not mark itself healthy.
+requestAnimationFrame(() => {
+  confirmLiveUpdate().catch((error) => console.warn('Live update confirm failed', error))
+})

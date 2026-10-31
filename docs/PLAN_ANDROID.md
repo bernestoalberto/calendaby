@@ -17,7 +17,8 @@ Goal: the web app and the Android app (one shared web code base inside Capacitor
 - Edge-to-edge is enforced for apps that target API 36, and Capacitor 8 provides the safe-area values; the layout already uses `env(safe-area-inset-*)` ([Android 16 behavior changes](https://developer.android.com/about/versions/16/behavior-changes-16), [Capacitor edge-to-edge guide](https://capawesome.io/blog/capacitor-edge-to-edge-and-safe-areas-guide/)).
 - Predictive back is on by default at API 36 on Android 16; the app does not intercept the back key itself.
 - No fixed screen orientation, so large screens and foldables are not blocked.
-- Pinch-zoom is allowed (no `maximum-scale` in the viewport).
+- Pinch-zoom is allowed (no `maximum-scale` in the viewport); `overflow-x: clip` on `html` stops the page sliding sideways.
+- Over-the-air web updates (`@capgo/capacitor-updater`, `src/liveUpdate.ts`) are NOT working yet. Still to do: choose a source (a Capgo account, or a self-hosted `updateUrl` in `capacitor.config.ts`), run `npx cap sync`, ship a new APK, then upload bundles. Until then the app only updates through Play. Check the privacy text before pointing at Capgo's cloud, since it sees the device and app ids. `resetWhenUpdate` drops a downloaded bundle on each Play update, so the new APK may briefly carry older web code than the last OTA bundle.
 
 ## To check on a phone (not verifiable from the code)
 
