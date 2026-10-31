@@ -13,3 +13,6 @@ project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/sh
 
 include ':capgo-capacitor-speech-recognition'
 project(':capgo-capacitor-speech-recognition').projectDir = new File('../node_modules/@capgo/capacitor-speech-recognition/android')
+
+include ':capgo-capacitor-updater'
+project(':capgo-capacitor-updater').projectDir = new File('../node_modules/@capgo/capacitor-updater/android')
