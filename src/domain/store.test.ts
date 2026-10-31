@@ -418,4 +418,22 @@ describe('seeding', () => {
     expect(types).toContain('music-time')
     expect((await upgraded.listFeatures()).find((f) => f.id === 'timeline')?.enabled).toBe(false)
   })
+
+  it('opens like a fresh install after everything is wiped', async () => {
+    const driver = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(driver)
+    await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')
+    await store.setSetting('baby', 'Lily')
+    await store.setFeature('timeline', false)
+    await store.removeOption('meds', 'Tylenol')
+    await store.wipe()
+    expect(store.list()).toEqual([])
+
+    const fresh = await SqliteEventStore.open(driver)
+    expect(fresh.list()).toEqual([])
+    expect(await fresh.pending(10)).toEqual({ events: [], deleted: [], sent: [] })
+    expect(fresh.setting('baby')).toBe((await SqliteEventStore.open(new NodeSqlDriver())).setting('baby'))
+    expect((await fresh.listFeatures()).find((f) => f.id === 'timeline')?.enabled).toBe(true)
+    expect(fresh.options('meds')).toEqual(DEFAULT_LISTS.meds)
+  })
 })

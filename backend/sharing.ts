@@ -87,6 +87,20 @@ export function mountSharing(app: Hono<Env>, provider: SharedProvider) {
     return { left: true }
   })
 
+  // Not a route() like the rest: those create a household for a newcomer, and this one only takes away.
+  app.post('/deleteMyData', async (c) => {
+    const body = None.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) return c.json({ error: body.error.message }, 400)
+    const userId = c.get('userId')
+    if (!userId) return c.json({ error: 'Sign in required' }, 401)
+    try {
+      await (await provider()).forget(userId)
+      return c.json({ deleted: true })
+    } catch (err) {
+      return failure(c, err)
+    }
+  })
+
   route('removeMember', z.strictObject({ userId: z.string().min(1) }), async ({ store, userId, householdId }, body) => ({
     removed: await store.removeMember(householdId, userId, body.userId),
   }))

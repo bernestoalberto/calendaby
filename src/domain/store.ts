@@ -49,6 +49,9 @@ const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, lo
 const DROP_REMOTE_PENDING_SQL = 'DELETE FROM sync_pending WHERE id IN (SELECT id FROM events WHERE remote = 1)'
 const DROP_REMOTE_EVENTS_SQL = 'DELETE FROM events WHERE remote = 1'
 
+const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+const dropTableSql = (name: string) => `DROP TABLE IF EXISTS "${name.replaceAll('"', '""')}"`
+
 const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
 const MIGRATIONS: Record<number, string[]> = {
@@ -393,6 +396,15 @@ export class SqliteEventStore implements EventStore {
     await this.reloadEvents()
     await this.db.exec("INSERT OR REPLACE INTO sync_pending (id, op) SELECT id, 'put' FROM events ORDER BY at")
     await this.db.exec('UPDATE shared_setting SET version = version + 1, fill = 1')
+  }
+
+  /** Drops every table and the schema version, so the next open starts like a fresh install with only the seeds. */
+  async wipe(): Promise<void> {
+    for (const { name } of await this.db.query<{ name: string }>(LIST_TABLES_SQL)) await this.db.exec(dropTableSql(name))
+    await this.db.exec('PRAGMA user_version = 0')
+    this.events = []
+    this.settings.clear()
+    this.lists.clear()
   }
 
   async listFeatures(): Promise<FeatureRow[]> {

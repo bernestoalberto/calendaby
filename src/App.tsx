@@ -4,6 +4,7 @@ import { parseLog } from './agents/capture'
 import { buildHandoff, handoffText } from './agents/handoff'
 import { callAgent, callBackend, HybridCaptureAgent, isoWithOffset } from './agents/remote'
 import { openDriver } from './db/open'
+import { deleteMyData } from './deleteMyData'
 import { appointmentAlerts } from './domain/appointmentAlerts'
 import { Appointment as AppointmentSchema, type Appointment } from './domain/appointments'
 import { buildAgenda, type CalendarEvent } from './domain/calendar'
@@ -149,7 +150,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     if (goal && Number.isFinite(minutes) && minutes >= 0) setTummyGoal(minutes)
   }, [store])
 
-  const sync = useSync(store, account.signedIn === true, onSynced)
+  // Set while erasing, so no sync puts a log back on the server between the server wipe and the phone's.
+  const [deleting, setDeleting] = useState(false)
+  const sync = useSync(store, account.signedIn === true && !deleting, onSynced)
   const speech = useSpeech(
     (heard) => setText((t) => (t ? `${t}, ${heard}` : heard)),
     (message) => setToast({ text: message }),
@@ -536,6 +539,18 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     setToast({ text: ok ? 'Test notification sent' : 'Notifications are not allowed' })
   }
 
+  async function deleteAll() {
+    setDeleting(true)
+    try {
+      await deleteMyData(store, account.signedIn === true)
+    } catch (err) {
+      setDeleting(false)
+      throw err
+    }
+    // A reload opens the emptied database exactly as a first launch would.
+    location.reload()
+  }
+
   function changeTimer(t: NursingTimer) {
     setTimer(t)
     setNow(nowMs())
@@ -758,6 +773,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onToggleReminders={() => void toggleReminders()}
             onTestReminder={() => void testReminder()}
             onHandoff={() => setSheet('handoff')}
+            onDeleteAll={deleteAll}
           />
         )}
         </Suspense>
