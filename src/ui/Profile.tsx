@@ -5,6 +5,7 @@ import { Account } from './Account'
 import { Appearance } from './Appearance'
 import { Customize } from './Customize'
 import type { ListId } from '../domain/options'
+import type { LogGapSetting } from '../domain/logReminder'
 import { Badge, Segmented } from './controls'
 import { analyticsAvailable } from '../analytics'
 import { Family } from './Family'
@@ -24,6 +25,8 @@ interface Props {
   lists: Record<ListId, string[]>
   sleepGoalHours: number
   onSleepGoal: (hours: number) => void
+  logGap: LogGapSetting
+  onLogGap: (next: LogGapSetting) => void
   onAddOption: (list: ListId, value: string) => Promise<string | undefined>
   onRemoveOption: (list: ListId, value: string) => void
   onRestoreOptions: (list: ListId) => void
@@ -174,6 +177,8 @@ export function Profile(p: Readonly<Props>) {
         lists={p.lists}
         sleepGoalHours={p.sleepGoalHours}
         onSleepGoal={p.onSleepGoal}
+        logGap={p.logGap}
+        onLogGap={p.onLogGap}
         onAdd={p.onAddOption}
         onRemove={p.onRemoveOption}
         onRestore={p.onRestoreOptions}
