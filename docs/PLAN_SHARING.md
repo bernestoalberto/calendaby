@@ -52,7 +52,7 @@ Mom and Dad each sign in with their own Google account on their own phone.
 ## Phases
 
 1. **Storage (done).** `backend/household.ts`: households, members, invites, scoped numbered events, tombstones, lockout; 20 tests. Needs `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to run hosted; a local file is used otherwise.
-2. **Routes (done).** `pushChanges`, `pullChanges`, `createInvite`, `previewInvite`, `joinHousehold`, `leaveHousehold`, `removeMember`, `householdInfo` behind the Clerk check, with tests for 401, bad input and scoping.
+2. **Routes (done).** `pushChanges`, `pullChanges`, `createInvite`, `previewInvite`, `joinHousehold`, `leaveHousehold`, `removeMember`, `householdInfo`, `deleteMyData` behind the Clerk check, with tests for 401, bad input and scoping.
 3. **Phone side (done, tested with two simulated phones; not yet on real devices).** Outbox and cursor in the on-device SQLite (new migration), sync loop with the triggers above, first-sync upload, and a Family card in Profile (invite code, members, join, leave, "Synced" status).
 4. **Shared settings.** Baby name, birth date and tummy goal sync; theme, feature switches, units and reminders stay per phone. Timeline shows who logged each entry.
 5. **Agent and hardening.** The agent reads the household's events from the database; rate limits; update `STATUS.md`.

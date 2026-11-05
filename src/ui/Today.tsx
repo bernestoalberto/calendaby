@@ -1,6 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type { NapForecast } from '../domain/analytics'
 import type { BabyEvent } from '../domain/events'
+import type { LogGap } from '../domain/logReminder'
+import { logGapText } from '../domain/notifications'
 import { rangeText, tonightText, type Outlook } from '../domain/outlook'
 import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
@@ -16,7 +18,9 @@ import {
   BottleIcon,
   BreastIcon,
   BulbIcon,
-  ChevronRightIcon, RulerIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RulerIcon,
   DiaperIcon,
   FaceIcon,
   MicIcon,
@@ -33,7 +37,7 @@ import { clock, eventDetail } from './kinds'
 import { ago, duration, formatAmount, type Unit } from './time'
 import { useSection } from './themeContext'
 
-export type QuickKind = 'feed' | 'diaper' | 'med' | 'note'
+export type QuickKind = 'feed' | 'diaper' | 'med' | 'note' | 'pump' | 'activity'
 
 interface Props {
   on: (feature: string) => boolean
@@ -54,6 +58,8 @@ interface Props {
   day: DaySummary
   forecast?: NapForecast
   outlook: Outlook
+  /** Set when nothing was logged for longer than the parent's reminder allows. */
+  logGap?: LogGap
   checkup?: Checkup & { around: number }
   lastFeed?: BabyEvent
   lastDiaper?: BabyEvent
@@ -101,10 +107,12 @@ export function Today(p: Props) {
         {p.asleep ? <MoonIcon width={18} height={18} /> : <SunIcon width={18} height={18} />}
       </div>
 
+      {p.logGap && <LogGapCard baby={p.baby} gap={p.logGap} now={p.now} onQuick={p.onQuick} />}
+
       {p.on('napForecast') && <NapCard {...p} />}
 
       <section {...quick}>
-        <div className="quick-row">
+        <QuickRow>
           <button type="button" className={p.asleep ? 'quick sleep on' : 'quick sleep'} onClick={p.onToggleSleep}>
             <span>{p.asleep ? <SunIcon /> : <MoonIcon />}</span>
             {p.asleep ? 'Wake' : 'Sleep'}
@@ -127,13 +135,29 @@ export function Today(p: Props) {
             </span>
             Meds
           </button>
+          {p.on('pumping') && (
+            <button type="button" className="quick pump" onClick={() => p.onQuick('pump')}>
+              <span>
+                <PumpIcon />
+              </span>
+              Pump
+            </button>
+          )}
+          {p.on('activities') && (
+            <button type="button" className="quick activity" onClick={() => p.onQuick('activity')}>
+              <span>
+                <FaceIcon />
+              </span>
+              Play
+            </button>
+          )}
           <button type="button" className="quick note" onClick={() => p.onQuick('note')}>
             <span>
               <NoteIcon />
             </span>
             Note
           </button>
-        </div>
+        </QuickRow>
       </section>
 
       {p.on('freeText') && (
@@ -395,6 +419,87 @@ export function Today(p: Props) {
       </section>
       )}
     </div>
+  )
+}
+
+/** Swipe on touch, scroll sideways on a trackpad, arrows for a mouse, arrow keys between options. */
+function QuickRow({ children }: { children: ReactNode }) {
+  const row = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ prev: false, next: false })
+
+  function measure() {
+    const el = row.current
+    if (!el) return
+    setEdges({ prev: el.scrollLeft > 1, next: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 })
+  }
+
+  useEffect(() => {
+    const el = row.current
+    if (!el) return
+    measure()
+    const resize = new ResizeObserver(measure)
+    resize.observe(el)
+    return () => resize.disconnect()
+  }, [])
+
+  function page(dir: 1 | -1) {
+    const el = row.current
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8 })
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('.quick')]
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    const next = buttons[at + (e.key === 'ArrowRight' ? 1 : -1)]
+    if (at === -1 || !next) return
+    e.preventDefault()
+    next.focus()
+  }
+
+  return (
+    <div className="quick-carousel">
+      <div className="quick-row" ref={row} onScroll={measure} onKeyDown={onKeyDown}>
+        {children}
+      </div>
+      {edges.prev && (
+        <button type="button" className="quick-arrow prev" aria-label="Show earlier options" tabIndex={-1} onClick={() => page(-1)}>
+          <ChevronLeftIcon width={18} height={18} />
+        </button>
+      )}
+      {edges.next && (
+        <button type="button" className="quick-arrow next" aria-label="Show more options" tabIndex={-1} onClick={() => page(1)}>
+          <ChevronRightIcon width={18} height={18} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function LogGapCard({ baby, gap, now, onQuick }: { baby: string; gap: LogGap; now: number; onQuick: (k: QuickKind) => void }) {
+  const { title, body } = logGapText(baby, gap, now)
+  return (
+    <section className="card tip" role="status">
+      <span className="tip-icon">
+        <NoteIcon />
+      </span>
+      <div>
+        <p className="eyebrow">Reminder</p>
+        <h3>{title}</h3>
+        <p className="muted">{body}</p>
+        <div className="tip-actions">
+          <button type="button" className="link strong" onClick={() => onQuick('feed')}>
+            Log a feed
+          </button>
+          <button type="button" className="link strong" onClick={() => onQuick('diaper')}>
+            Log a diaper
+          </button>
+          <button type="button" className="link muted" onClick={() => onQuick('note')}>
+            All quiet
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 

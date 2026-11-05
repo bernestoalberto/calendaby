@@ -52,6 +52,11 @@ export interface SharedStore {
   removeMember(householdId: string, ownerId: string, userId: string): Promise<boolean>
   /** A non-owner leaves. */
   leave(userId: string): Promise<void>
+  /**
+   * Erases what the server keeps about a user. Alone, their household and its log go with them; in a family, the shared
+   * log stays with the others, they stop being a member and the longest-standing member becomes owner if needed.
+   */
+  forget(userId: string): Promise<void>
   /** Inserts or updates events. A deleted event is not brought back by a late upload from another phone. */
   putEvents(householdId: string, events: BabyEvent[]): Promise<number>
   /** Marks an event deleted but keeps it so other phones learn about it. False when there was nothing to delete. */
@@ -80,6 +85,18 @@ const RENAME_MEMBER_SQL = 'UPDATE member SET name = ? WHERE user_id = ? AND name
 const PROMOTE_SUCCESSOR_SQL = `UPDATE member SET role = 'owner'
   WHERE user_id = (SELECT user_id FROM member WHERE household_id = ?1 ORDER BY joined_at, user_id LIMIT 1)
     AND NOT EXISTS (SELECT 1 FROM member WHERE household_id = ?1 AND role = 'owner')`
+
+const FORGET_USER_SQL = [
+  'DELETE FROM member WHERE user_id = ?',
+  'DELETE FROM invite WHERE created_by = ?',
+  'DELETE FROM failed_try WHERE user_id = ?',
+]
+const FORGET_HOUSEHOLD_SQL = [
+  'DELETE FROM event WHERE household_id = ?',
+  'DELETE FROM household_setting WHERE household_id = ?',
+  'DELETE FROM invite WHERE household_id = ?',
+  'DELETE FROM household WHERE id = ?',
+]
 
 // Each entry runs once, in order. Never edit an entry that has shipped; add a new one.
 const MIGRATIONS: string[][] = [
@@ -286,6 +303,17 @@ export async function openShared(options: Options = {}): Promise<SharedStore> {
       const me = (await members(current)).find((m) => m.userId === userId)
       if (me?.role === 'owner') throw new HouseholdError('owner_leaving', 'The owner cannot leave. Remove the others first.')
       await db.execute({ sql: 'DELETE FROM member WHERE user_id = ?', args: [userId] })
+    },
+
+    async forget(userId) {
+      const current = await householdOf(userId)
+      const statements = FORGET_USER_SQL.map((sql) => ({ sql, args: [userId] }))
+      if (current !== undefined) {
+        const alone = (await members(current)).every((m) => m.userId === userId)
+        if (alone) statements.push(...FORGET_HOUSEHOLD_SQL.map((sql) => ({ sql, args: [current] })))
+        else statements.push({ sql: PROMOTE_SUCCESSOR_SQL, args: [current] })
+      }
+      await db.batch(statements, 'write')
     },
 
     async putEvents(householdId, events) {

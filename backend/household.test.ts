@@ -221,6 +221,33 @@ describe('households and invites', () => {
   })
 })
 
+describe('deleting my data', () => {
+  it('erases a household that has no one else in it, with its log and settings', async () => {
+    await store.putEvents(A, [feed('e1', 10)])
+    await store.syncSettings(A, [{ key: 'baby', value: 'Ava', onlyIfMissing: false }])
+    await store.forget('user_a')
+    expect(await store.householdOf('user_a')).toBeUndefined()
+    expect(await ids(A)).toEqual([])
+    expect(await store.syncSettings(A, [])).toEqual([])
+    expect(await store.ensureHousehold('user_a')).not.toBe(A)
+  })
+
+  it('leaves the family log with the others and hands over ownership', async () => {
+    await store.putEvents(A, [feed('e1', 10)])
+    await store.redeemInvite('user_b', (await store.createInvite(A, 'user_a')).code)
+    await store.forget('user_a')
+    expect(await store.householdOf('user_a')).toBeUndefined()
+    expect(await ids(A)).toEqual(['e1'])
+    expect((await store.members(A)).map((m) => [m.userId, m.role])).toEqual([['user_b', 'owner']])
+  })
+
+  it('does nothing to anyone else when the user has no household', async () => {
+    await store.putEvents(B, [feed('e2', 20)])
+    await store.forget('user_nobody')
+    expect(await ids(B)).toEqual(['e2'])
+  })
+})
+
 describe('shared settings', () => {
   const set = (key: 'baby' | 'birth' | 'tummyGoal', value: string, onlyIfMissing = false) => ({ key, value, onlyIfMissing })
 

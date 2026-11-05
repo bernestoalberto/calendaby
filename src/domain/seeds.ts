@@ -1,6 +1,6 @@
 import { DEFAULT_ACTIVITY_TYPES } from './activities'
 import { DEFAULT_AGE_NORMS } from './ageNorms'
-import { DEFAULT_FEATURES } from './features'
+import { DEFAULT_FEATURES, FEATURES_V2 } from './features'
 import { DEFAULT_SLEEP_NEEDS } from './sleepGoal'
 import { DEFAULT_VACCINE_TYPES } from './vaccines'
 import { DEFAULT_MILESTONES } from '../knowledge/milestones'
@@ -27,14 +27,23 @@ export interface Seed {
 
 export const sqlText = (v: string) => `'${v.replaceAll("'", "''")}'`
 
+function featureRows(rows: typeof DEFAULT_FEATURES, firstSort: number): string[] {
+  return rows.map(
+    (f, i) =>
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${firstSort + i}, ${f.off ? 0 : 1})`,
+  )
+}
+
 export const SEEDS: Seed[] = [
   {
     id: 'features-v1',
     since: 5,
-    statements: DEFAULT_FEATURES.map(
-      (f, i) =>
-        `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) VALUES (${[f.id, f.label, f.hint, f.group].map(sqlText).join(', ')}, ${i}, ${f.off ? 0 : 1})`,
-    ),
+    statements: featureRows(DEFAULT_FEATURES, 0),
+  },
+  {
+    id: 'features-v2',
+    since: Infinity,
+    statements: featureRows(FEATURES_V2, DEFAULT_FEATURES.length),
   },
   // A switch added after features-v1 shipped gets its own seed, so phones that ran v1 still receive it.
   {

@@ -4,7 +4,9 @@ import type { NotificationAccess } from '../notifications'
 import { Account } from './Account'
 import { Appearance } from './Appearance'
 import { Customize } from './Customize'
+import { DeleteData } from './DeleteData'
 import type { ListId } from '../domain/options'
+import type { LogGapSetting } from '../domain/logReminder'
 import { Badge, Segmented } from './controls'
 import { analyticsAvailable } from '../analytics'
 import { Family } from './Family'
@@ -29,6 +31,8 @@ interface Props {
   sleepAuto: boolean
   onSleepAuto: (auto: boolean) => void
   onSleepGoal: (hours: number) => void
+  logGap: LogGapSetting
+  onLogGap: (next: LogGapSetting) => void
   onAddOption: (list: ListId, value: string) => Promise<string | undefined>
   onRemoveOption: (list: ListId, value: string) => void
   onRestoreOptions: (list: ListId) => void
@@ -50,6 +54,7 @@ interface Props {
   onToggleReminders: () => void
   onTestReminder: () => void
   onHandoff: () => void
+  onDeleteAll: () => Promise<void>
 }
 
 function reminderStatusLabel(reminders: boolean, access: NotificationAccess): string {
@@ -192,6 +197,8 @@ export function Profile(p: Readonly<Props>) {
         onSleepGoal={p.onSleepGoal}
         sleepAuto={p.sleepAuto}
         onSleepAuto={p.onSleepAuto}
+        logGap={p.logGap}
+        onLogGap={p.onLogGap}
         onAdd={p.onAddOption}
         onRemove={p.onRemoveOption}
         onRestore={p.onRestoreOptions}
@@ -221,6 +228,7 @@ export function Profile(p: Readonly<Props>) {
             ? 'Everything is stored in a private database on this device. Nothing leaves it unless you share it.'
             : 'This browser could not open persistent storage, so logs disappear when the tab closes. Open the app over https or localhost to keep them.'}
         </p>
+        <DeleteData onDelete={p.onDeleteAll} />
       </section>
     </div>
   )
