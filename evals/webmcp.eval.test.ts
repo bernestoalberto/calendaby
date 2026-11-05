@@ -20,7 +20,7 @@ describe('WebMCP evals (the model-driven run is `npm run evals:webmcp`)', () => 
   it('schema.json is exactly what the app registers, so the evals test the real tools', () => {
     const registered: unknown[] = []
     vi.stubGlobal('document', { modelContext: { registerTool: async (t: unknown) => void registered.push(t) } })
-    registerWebMcpTools({ logText: async () => '', handoff: () => '', today: () => '', upcoming: () => '', logMeasurement: async () => '', growth: () => '', milestones: () => '', insights: () => '' })
+    registerWebMcpTools({ logText: async () => '', handoff: () => '', today: () => '', upcoming: () => '', logMeasurement: async () => '', growth: () => '', milestones: () => '', vaccines: () => '', insights: () => '' })
     const strip = ({ name, description, inputSchema }: Schema['tools'][number]) => ({ name, description, inputSchema })
     expect(registered.map((t) => strip(t as Schema['tools'][number]))).toEqual(schema.tools.map(strip))
   })

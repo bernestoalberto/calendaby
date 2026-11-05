@@ -1,6 +1,6 @@
 # Plan: vaccination record
 
-**Status (2026-11-05): phases 1 to 3 built and tested (see `docs/STATUS.md`); phases 4 and 5 not started.** Change from the plan: the date uses the Logger's existing "When" control, so a dose is stamped with the time it is logged unless the parent adjusts it. Phase 2: a line that names more than one vaccine shows each one's dose count instead of one number, and the screen is opened from a Vaccines card on Today. Phase 3: place, lot and notes never go to the assistant (stripped on the phone), and visit prep's line is part of the plan, not the cited "what to expect" list, because it comes from the baby's own record.
+**Status (2026-11-05): phases 1 to 4 built and tested (see `docs/STATUS.md`); phase 5 is the docs, kept current as each phase lands.** Change from the plan: the date uses the Logger's existing "When" control, so a dose is stamped with the time it is logged unless the parent adjusts it. Phase 2: a line that names more than one vaccine shows each one's dose count instead of one number, and the screen is opened from a Vaccines card on Today. Phase 3: place, lot and notes never go to the assistant (stripped on the phone), and visit prep's line is part of the plan, not the cited "what to expect" list, because it comes from the baby's own record.
 
 Goal: the parent keeps the baby's vaccination record in the app, sees what the CDC schedule lists for the baby's age next to what is recorded, and both parents share it. It does not depend on `PLAN_RAG.md`.
 

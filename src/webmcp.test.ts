@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkedLogText, checkedMeasurement, describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
+import { checkedLogText, checkedMeasurement, describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, describeVaccines, registerWebMcpTools, type WebMcpHandlers } from './webmcp'
 
 interface Registered {
   name: string
@@ -30,6 +30,7 @@ const handlers = (): WebMcpHandlers => ({
   logMeasurement: vi.fn(async () => 'Logged Growth · Weight 6.2 kg'),
   growth: vi.fn(() => 'Weight 6.2 kg'),
   milestones: vi.fn(() => 'Rolls over: not yet'),
+  vaccines: vi.fn(() => 'DTaP: 1 dose'),
   insights: vi.fn(() => '- Weight is up'),
 })
 
@@ -120,6 +121,30 @@ describe('describeGrowth, describeMilestones and describeInsights', () => {
   })
 })
 
+describe('describeVaccines', () => {
+  const report = {
+    recorded: [{ vaccine: 'DTaP', dose: 1, date: '2026-10-28' }],
+    listedForAge: [{ visit: '2 months', items: [{ text: 'DTaP', recorded: ['DTaP: 1 dose recorded'] }, { text: 'Hib', recorded: ['Hib: not recorded yet'] }] }],
+    scheduleNote: 'Confirm what is due with your pediatrician.',
+    sources: [],
+    rules: '',
+  }
+
+  it('lists the record and the schedule lines, and says the pediatrician decides what is due', () => {
+    const text = describeVaccines(report, 'EJ')
+    expect(text).toContain('DTaP, dose 1, 2026-10-28')
+    expect(text).toContain('2 months: DTaP (DTaP: 1 dose recorded); Hib (Hib: not recorded yet)')
+    expect(text).toContain('Confirm what is due with your pediatrician.')
+    expect(text).toMatch(/pediatrician decides what is due/i)
+    expect(text).not.toMatch(/overdue|missed|behind|up to date/i)
+  })
+
+  it('says so when nothing is recorded or the birth date is missing', () => {
+    expect(describeVaccines({ ...report, recorded: [] }, 'EJ')).toContain('No vaccines have been recorded for EJ')
+    expect(describeVaccines({ ...report, listedForAge: [], ageNote: 'Add the birth date.' }, 'EJ')).toContain('Add the birth date.')
+  })
+})
+
 describe('the growth tools', () => {
   it('log a checked measurement and refuse a bad one without touching the log', async () => {
     const ctx = fakeContext()
@@ -141,9 +166,20 @@ describe('the growth tools', () => {
     expect(await ctx.tools.get('get_growth')?.execute({})).toBe('Weight 6.2 kg')
     expect(await ctx.tools.get('get_milestones')?.execute({})).toBe('Rolls over: not yet')
     expect(await ctx.tools.get('get_insights')?.execute({})).toBe('- Weight is up')
-    for (const name of ['get_growth', 'get_milestones', 'get_insights']) expect(ctx.tools.get(name)?.annotations?.readOnlyHint).toBe(true)
+    expect(await ctx.tools.get('get_vaccines')?.execute({})).toBe('DTaP: 1 dose')
+    for (const name of ['get_growth', 'get_milestones', 'get_vaccines', 'get_insights']) expect(ctx.tools.get(name)?.annotations?.readOnlyHint).toBe(true)
     expect(ctx.tools.get('get_insights')?.annotations?.untrustedContentHint).toBe(true)
     expect(ctx.tools.get('log_measurement')?.annotations?.readOnlyHint).toBe(false)
+  })
+
+  it('offers no way to record a vaccination, only to read the record', () => {
+    const ctx = fakeContext()
+    withContext(ctx)
+    registerWebMcpTools(handlers())
+    expect([...ctx.tools.keys()].filter((n) => /vaccin/.test(n))).toEqual(['get_vaccines'])
+    const tool = ctx.tools.get('get_vaccines')
+    expect(tool?.inputSchema).toMatchObject({ properties: {}, additionalProperties: false })
+    expect(tool?.description).toMatch(/does not say what is due/i)
   })
 
   it('offers no way to answer a milestone', () => {
@@ -160,7 +196,7 @@ describe('registerWebMcpTools', () => {
     expect(() => registerWebMcpTools(handlers())()).not.toThrow()
   })
 
-  it('offers the eight tools with descriptions and object schemas', () => {
+  it('offers the nine tools with descriptions and object schemas', () => {
     const ctx = fakeContext()
     withContext(ctx)
     registerWebMcpTools(handlers())
@@ -171,6 +207,7 @@ describe('registerWebMcpTools', () => {
       'get_milestones',
       'get_today_summary',
       'get_upcoming_predictions',
+      'get_vaccines',
       'log_baby_event',
       'log_measurement',
     ])

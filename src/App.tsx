@@ -44,7 +44,7 @@ import { eventTitle } from './ui/kinds'
 import type { GrowthRef, Sex } from './domain/growthReference'
 import { bodyUnits, growthTiles } from './domain/growth'
 import { vaccineProblem, type VaccineType } from './domain/vaccines'
-import { vaccineWithoutDetails, withoutVaccineDetails } from './domain/vaccineReport'
+import { vaccineReport, vaccineWithoutDetails, withoutVaccineDetails } from './domain/vaccineReport'
 import { Growth } from './ui/Growth'
 import { Vaccines } from './ui/Vaccines'
 import { InsightCards } from './ui/InsightCards'
@@ -60,7 +60,7 @@ import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { forgetPendingJoin, peekPendingJoin } from './pendingJoin'
 import { shareText } from './share'
-import { describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, registerWebMcpTools, type MeasurementInput, type WebMcpHandlers } from './webmcp'
+import { describeDay, describeGrowth, describeInsights, describeMilestones, describeUpcoming, describeVaccines, registerWebMcpTools, type MeasurementInput, type WebMcpHandlers } from './webmcp'
 import { useSpeech } from './useSpeech'
 import './App.css'
 
@@ -542,6 +542,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     logMeasurement: logMeasurementForAssistant,
     growth: () => describeGrowth(growthTiles(events, bodyUnits('ml'), babySex, birth || undefined, growthRef), baby),
     milestones: () => describeMilestones(milestoneReport(milestones, events, wholeMonths(birth || undefined, nowMs())), baby),
+    vaccines: () => describeVaccines(vaccineReport(events.filter((e) => e.kind === 'vaccine'), weeksOld(birth || undefined, nowMs()), (ms) => new Date(ms).toISOString().slice(0, 10)), baby),
     insights: () => describeInsights(insights, baby),
   }
   useEffect(
@@ -554,6 +555,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         logMeasurement: (input) => assistant.current?.logMeasurement(input) ?? Promise.resolve('The app is not ready'),
         growth: () => assistant.current?.growth() ?? '',
         milestones: () => assistant.current?.milestones() ?? '',
+        vaccines: () => assistant.current?.vaccines() ?? '',
         insights: () => assistant.current?.insights() ?? '',
       }),
     [],

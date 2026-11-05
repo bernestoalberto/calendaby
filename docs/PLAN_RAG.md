@@ -1,6 +1,6 @@
 # Plan: agentic RAG over the baby's own data, on the phone
 
-**Status: planned, nothing built.** Rewritten after the owner chose: agentic (the model decides when to search), over the baby's own data, searched on the phone.
+**Status (2026-11-05): phase 1 (platform checks) done, results below; phases 2 to 6 not started.** Rewritten after the owner chose: agentic (the model decides when to search), over the baby's own data, searched on the phone.
 
 Goal: the assistant can find things in the baby's own log by meaning or words, not only by the fixed reports: "when did we last note a rash?", "what did the doctor say about the cough?", "what did she eat before the last fussy night?". Today it only has `listEvents` (latest events), the reports, and `guide()`.
 
@@ -18,9 +18,20 @@ Goal: the assistant can find things in the baby's own log by meaning or words, n
 - **No new tool for the browser's assistant yet.** `search_log` for WebMCP can follow once the agent version is proven, with an eval case.
 - **Guards:** capped steps (already `stopWhen`), capped calls to `searchLog` per answer, signed-in as today. The tool is absent when the switch `aiSearch` is off; everything else works as now.
 
+## Phase 1 results (2026-11-05)
+
+- **FTS5 on the web:** the shipped `@sqlite.org/sqlite-wasm` binary lists `ENABLE_FTS5` in its compile options.
+- **FTS5 on Android:** `@capacitor-community/sqlite` 8.1.1 uses SQLCipher 4.17.0; its `arm64-v8a` library lists `ENABLE_FTS5`. Not run on the phone, only read from the library.
+- **FTS5 on iOS: not verified.** The plugin uses SQLCipher through Swift Package Manager; there is no Mac here to build it. Check before shipping to iOS; the fallback is a `LIKE` search over the same text.
+- **The query works:** on real SQLite (`node:sqlite`), `tokenize='porter unicode61'` makes "rash" match "Rashes", `bm25()` ranks the hits, and a date filter joins on the events table. An external-content or contentless table is not needed; a plain FTS table keyed by the event's rowid is enough.
+- **The client-side tool loop works with the AI SDK 7.** A tool with no `execute` stops `generateText` with `finishReason: tool-calls` and the call in `toolCalls`; `response.messages` holds the assistant turn; calling again with the original messages, that turn and a `tool` message carrying the result produces the final answer. Tried with the stub model only, never with a real one.
+- **What that means for `/api/agent`:** the function stays stateless. A reply that needs a search returns `pending` (tool call id, name and input) plus the messages so far; the phone runs the search on its own database and posts back a `resume` with the tool result; the server rebuilds the system prompt and tools itself and continues. Every hop re-sends the prompt and tool list, and costs one extra round trip. Each hop is an ordinary short request, so there is no long-running function.
+- **Rules for `resume`:** Zod-check the messages (only an assistant tool call and a tool result, no system or free assistant text), cap the number of hops per answer (3) and the size of a result, and treat the result as data. A forged `resume` can only change the requester's own answer.
+- **Still unknown:** behaviour with a real model (does it call `searchLog` sensibly, does it stop), the latency of two or three hops on a phone, and what the app shows while it waits.
+
 ## Phases
 
-1. **Check the platform.** FTS5 on web and native; the client-side tool loop against `/api/agent`. Done when: both are tried on a throwaway branch and the findings are written here, or this plan changes.
+1. **Check the platform.** FTS5 on web and native; the client-side tool loop against `/api/agent`. Done when: both are tried on a throwaway branch and the findings are written here, or this plan changes. **Done: see Phase 1 results (iOS FTS5 still open).**
 2. **Index.** FTS table, migration, triggers, `searchLog` function with date and kind filters. Done when: tests on a real in-memory SQLite find an entry by a word, respect the date and kind filters, drop an entry from the index when it is deleted, and show an edited entry's new text.
 3. **Agent loop.** Client-side tool, stub-model test, prompt rules, switch `aiSearch`. Done when: with the stub model, "when did we last note a rash?" calls `searchLog`, the answer cites the entry's date, no hit gives "I could not find that in your log", and a note that says "ignore your rules" is not followed.
 4. **Evals.** A small set of questions with the entries each should find, in `evals/`. Done when: the keyword search finds the expected entries; any miss is the case that justifies step 2 of the method, and the result is written here.

@@ -241,6 +241,38 @@
     ]
   },
   {
+    "name": "Ask which vaccines are recorded",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "Which vaccines has she had so far?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_vaccines",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "name": "Ask about the shots at the next visit",
+    "messages": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "What shots are listed for her age, and which have we recorded?"
+      }
+    ],
+    "expectedCall": [
+      {
+        "functionName": "get_vaccines",
+        "arguments": {}
+      }
+    ]
+  },
+  {
     "name": "Ask for new notes",
     "messages": [
       {
