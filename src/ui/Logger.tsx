@@ -2,6 +2,7 @@ import type { ListId } from '../domain/options'
 import { useState } from 'react'
 import type { ActivityType } from '../domain/activities'
 import type { DraftEvent } from '../domain/events'
+import type { VaccineType } from '../domain/vaccines'
 import { bodyUnits, EMPTY_MEASURE_TEXT, hasMeasure, measureDraft, type MeasureText } from '../domain/growth'
 import { elapsed, lastSide, nursingDraft, switchSide, toggle, EMPTY_TIMER, type NursingTimer, type Side } from '../domain/nursing'
 import type { SleepSession } from '../domain/summary'
@@ -32,7 +33,7 @@ import { duration, fromLocalInput, OZ, stopwatch, toLocalInput, type Unit } from
 // Kept out of render so the component stays pure.
 const nowMs = () => Date.now()
 
-export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump' | 'growth'
+export type LogTab = 'feed' | 'sleep' | 'diaper' | 'med' | 'note' | 'activity' | 'pump' | 'growth' | 'vaccine'
 
 const STEP = { oz: 0.5, ml: 10 }
 const MAX = { oz: 12, ml: 360 }
@@ -42,10 +43,12 @@ interface Props {
   now: number
   unit: Unit
   activityTypes: ActivityType[]
+  vaccineTypes: VaccineType[]
   /** The editable lists (tags, medicines, preset amounts and durations), read from the database. */
   lists: Record<ListId, string[]>
   on: (feature: string) => boolean
   onAddActivityType: (label: string) => Promise<ActivityType | undefined>
+  onAddVaccineType: (label: string) => Promise<VaccineType | undefined>
   tab: LogTab
   onTab: (t: LogTab) => void
   onUnit: (u: Unit) => void
@@ -89,6 +92,12 @@ export function Logger(p: Props) {
   const [pumpAmount, setPumpAmount] = useState('')
   const [pumpSide, setPumpSide] = useState<'left' | 'right' | 'both' | null>(null)
   const [growth, setGrowth] = useState<MeasureText>(EMPTY_MEASURE_TEXT)
+  const [vaccine, setVaccine] = useState('')
+  const [vaccineDose, setVaccineDose] = useState<number | null>(null)
+  const [place, setPlace] = useState('')
+  const [lot, setLot] = useState('')
+  const [newVaccine, setNewVaccine] = useState('')
+  const chosenVaccine = p.vaccineTypes.find((t) => t.id === vaccine)
   const units = bodyUnits(p.unit)
 
   const nursing = nursingDraft(p.timer, p.now)
@@ -106,6 +115,10 @@ export function Logger(p: Props) {
     setPumpAmount('')
     setPumpSide(null)
     setGrowth(EMPTY_MEASURE_TEXT)
+    setVaccine('')
+    setVaccineDose(null)
+    setPlace('')
+    setLot('')
     setStart('')
     setEnd('')
     setAdjust(false)
@@ -146,6 +159,18 @@ export function Logger(p: Props) {
       drafts.push({ kind: 'pump', at, amountMl, side: pumpSide ?? undefined, durationMin: toMinutes(minutes), ...withNote([], note) })
     }
     if (p.tab === 'growth' && hasMeasure(growth, units)) drafts.push({ kind: 'measure', at, ...measureDraft(growth, units), ...withNote([], note) })
+    if (p.tab === 'vaccine' && chosenVaccine) {
+      drafts.push({
+        kind: 'vaccine',
+        at,
+        vaccineId: chosenVaccine.id,
+        label: chosenVaccine.label,
+        dose: vaccineDose ?? undefined,
+        place: place.trim() || undefined,
+        lot: lot.trim() || undefined,
+        ...withNote([], note),
+      })
+    }
     if (drafts.length) p.onSave(drafts)
     reset()
   }
@@ -158,9 +183,10 @@ export function Logger(p: Props) {
     (p.tab === 'note' && note.trim() !== '') ||
     (p.tab === 'activity' && activity !== '') ||
     (p.tab === 'pump' && (Number(pumpAmount) > 0 || toMinutes(minutes) !== undefined)) ||
-    (p.tab === 'growth' && hasMeasure(growth, units))
+    (p.tab === 'growth' && hasMeasure(growth, units)) ||
+    (p.tab === 'vaccine' && chosenVaccine !== undefined)
 
-  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note', activity: 'Save Activity', pump: 'Save Pump', growth: 'Save Growth' }[p.tab]
+  const saveLabel = { feed: 'Save Feed', sleep: 'Save Sleep', diaper: 'Save Diaper', med: 'Save Medicine', note: 'Save Note', activity: 'Save Activity', pump: 'Save Pump', growth: 'Save Growth', vaccine: 'Save Vaccine' }[p.tab]
   const awake = p.awakeSince !== undefined ? `Awake ${duration(p.now - p.awakeSince)}` : undefined
 
   return (
@@ -196,6 +222,7 @@ export function Logger(p: Props) {
             ...(p.on('activities') ? [{ value: 'activity' as const, label: <><FaceIcon width={18} height={18} /> Tummy &amp; Play</> }] : []),
             ...(p.on('pumping') ? [{ value: 'pump' as const, label: <><PumpIcon width={18} height={18} /> Pump</> }] : []),
             ...(p.on('growth') ? [{ value: 'growth' as const, label: <><RulerIcon width={18} height={18} /> Growth</> }] : []),
+            ...(p.on('vaccines') ? [{ value: 'vaccine' as const, label: <><PillIcon width={18} height={18} /> Vaccines</> }] : []),
             { value: 'note', label: <><NoteIcon width={18} height={18} /> Note</> },
           ]}
         />
@@ -487,6 +514,61 @@ export function Logger(p: Props) {
             <span className="field-label">Optional note</span>
             <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="At the pediatrician, after a feed…" />
           </label>
+        </section>
+      )}
+
+      {p.tab === 'vaccine' && (
+        <section className="card">
+          <div className="card-head">
+            <h3>
+              <span className="round-icon sage small">
+                <PillIcon />
+              </span>
+              Vaccine given
+            </h3>
+          </div>
+          <div className="chips">
+            {p.vaccineTypes.map((t) => (
+              <button key={t.id} type="button" aria-pressed={vaccine === t.id} className={vaccine === t.id ? 'chip on' : 'chip'} onClick={() => setVaccine(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="chips" role="group" aria-label="Dose number (optional)">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" aria-pressed={vaccineDose === n} className={vaccineDose === n ? 'chip on' : 'chip'} onClick={() => setVaccineDose(vaccineDose === n ? null : n)}>
+                Dose {n}
+              </button>
+            ))}
+          </div>
+          <label className="field">
+            <span className="field-label">Where (optional)</span>
+            <input value={place} maxLength={80} onChange={(e) => setPlace(e.target.value)} placeholder="Dr Lee's office" />
+          </label>
+          <label className="field">
+            <span className="field-label">Lot number (optional)</span>
+            <input value={lot} maxLength={40} onChange={(e) => setLot(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">Optional note</span>
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Slight fever that evening…" />
+          </label>
+          <p className="muted small">This is your own record. Ask your pediatrician what is due.</p>
+          <form
+            className="row-field"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void p.onAddVaccineType(newVaccine).then((added) => {
+                if (added) setVaccine(added.id)
+                setNewVaccine('')
+              })
+            }}
+          >
+            <input value={newVaccine} onChange={(e) => setNewVaccine(e.target.value)} placeholder="Add your own, e.g. Yellow fever" aria-label="New vaccine" />
+            <button type="submit" className="chip-button" disabled={!newVaccine.trim()}>
+              Add
+            </button>
+          </form>
         </section>
       )}
 

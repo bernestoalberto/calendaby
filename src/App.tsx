@@ -43,6 +43,7 @@ import { ClockIcon, FaceIcon, ListIcon, LogoIcon, PlusIcon, ShareIcon, SparkIcon
 import { eventTitle } from './ui/kinds'
 import type { GrowthRef, Sex } from './domain/growthReference'
 import { bodyUnits, growthTiles } from './domain/growth'
+import { vaccineProblem, type VaccineType } from './domain/vaccines'
 import { Growth } from './ui/Growth'
 import { InsightCards } from './ui/InsightCards'
 import { insightAlert, insightSignature, insightsDue } from './domain/insights'
@@ -120,6 +121,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [sleepGoalHours, setSleepGoalHours] = useState(() => numberSetting(store.setting('sleepGoalHours'), DEFAULT_SETTINGS.sleepGoalHours, 1))
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
+  const [vaccineTypes, setVaccineTypes] = useState<VaccineType[]>([])
   const [tummyGoal, setTummyGoal] = useState(() => numberSetting(store.setting('tummyGoal'), DEFAULT_SETTINGS.tummyGoal, 0))
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
@@ -191,6 +193,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.listFeatures().then(setFeatureRows)
     void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
+    void store.listVaccineTypes().then(setVaccineTypes)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('analytics').then((v) => {
       setShareUsage(v === 'on')
@@ -445,6 +448,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     const added: BabyEvent[] = []
     const problems: string[] = []
     for (const d of drafts) {
+      const why = vaccineProblem(d, nowMs())
+      if (why) {
+        problems.push(why)
+        continue
+      }
       try {
         added.push(await store.append(d, caregiver))
         track('log_entry', { kind: d.kind })
@@ -563,6 +571,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
 
   /** Returns a message to show in the sheet when the save fails, otherwise closes it. */
   async function saveEdit(edits: EventEdit[]): Promise<string | undefined> {
+    const why = edits.map((e) => vaccineProblem(e.draft, nowMs())).find(Boolean)
+    if (why) return why
     try {
       for (const e of edits) await store.update(e.id, e.draft)
     } catch {
@@ -687,6 +697,17 @@ function Tracker({ store }: { store: SqliteEventStore }) {
       return added
     } catch (err) {
       setToast({ text: err instanceof Error ? err.message : "Couldn't add that activity" })
+      return undefined
+    }
+  }
+
+  async function addVaccineType(label: string): Promise<VaccineType | undefined> {
+    try {
+      const added = await store.addVaccineType(label)
+      setVaccineTypes(await store.listVaccineTypes())
+      return added
+    } catch (err) {
+      setToast({ text: err instanceof Error ? err.message : "Couldn't add that vaccine" })
       return undefined
     }
   }
@@ -826,9 +847,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             now={now}
             unit={unit}
             activityTypes={activityTypes}
+            vaccineTypes={vaccineTypes}
             lists={lists}
             on={on}
             onAddActivityType={addActivityType}
+            onAddVaccineType={addVaccineType}
             tab={logTab}
             onTab={setLogTab}
             onUnit={changeUnit}

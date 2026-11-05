@@ -262,6 +262,23 @@ describe('two phones, two accounts, one household', () => {
     expect(mom.list().filter((e) => e.kind === 'milestone')).toHaveLength(2)
   })
 
+  it('carries a vaccination, with its dose, place and lot, to the other parent and back after an edit', async () => {
+    const mom = await phone()
+    const dad = await phone()
+    await join(callAs('tok_mom'), callAs('tok_dad'), 'Dad')
+
+    const given = await mom.append({ kind: 'vaccine', at: 5_000_000, vaccineId: 'dtap', label: 'DTaP', dose: 1, place: 'Dr Lee', lot: 'AB1234' }, 'Mom')
+    await syncOnce(mom, callAs('tok_mom'))
+    await syncOnce(dad, callAs('tok_dad'))
+    expect(dad.list()).toMatchObject([{ kind: 'vaccine', vaccineId: 'dtap', label: 'DTaP', dose: 1, place: 'Dr Lee', lot: 'AB1234', loggedBy: 'Mom' }])
+
+    await mom.update(given.id, { kind: 'vaccine', at: 5_000_000, vaccineId: 'dtap', label: 'DTaP', dose: 2 })
+    await syncOnce(mom, callAs('tok_mom'))
+    await syncOnce(dad, callAs('tok_dad'))
+    expect(dad.list()).toMatchObject([{ kind: 'vaccine', dose: 2 }])
+    expect(dad.list()[0]).not.toHaveProperty('lot')
+  })
+
   it('refuses a sex that is not girl or boy', async () => {
     const mom = await phone()
     await mom.setSetting('babySex', 'dragon')

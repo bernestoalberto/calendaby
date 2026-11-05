@@ -36,6 +36,8 @@ export function eventTitle(e: BabyEvent, unit: Unit = 'ml', types: ActivityType[
       return `Growth · ${measureParts(e, unit).join(', ')}`
     case 'milestone':
       return e.text
+    case 'vaccine':
+      return `${e.label}${e.dose ? ` · dose ${e.dose}` : ''}`
   }
 }
 
@@ -59,6 +61,8 @@ export function eventHeading(e: BabyEvent, types: ActivityType[] = DEFAULT_ACTIV
       return 'Growth'
     case 'milestone':
       return 'Milestone'
+    case 'vaccine':
+      return 'Vaccine'
   }
 }
 
@@ -84,6 +88,8 @@ export function eventDetail(e: BabyEvent, unit: Unit): string {
       return measureParts(e, unit).join(' · ')
     case 'milestone':
       return STATE_TEXT[e.state]
+    case 'vaccine':
+      return [e.place, e.lot ? `Lot ${e.lot}` : ''].filter(Boolean).join(' · ') || 'Given'
     default:
       return ''
   }

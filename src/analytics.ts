@@ -12,7 +12,7 @@ const MEASUREMENT_ID = 'G-MEV4FXM7CK'
 // Each event and, for each label it may carry, the only values allowed. Anything else is dropped.
 const EVENTS = {
   screen_opened: { screen: ['today', 'timeline', 'activity', 'log', 'analytics', 'growth', 'calendar', 'agent', 'profile'] },
-  log_entry: { kind: ['feed', 'sleep', 'diaper', 'med', 'note', 'activity', 'pump', 'measure', 'milestone'] },
+  log_entry: { kind: ['feed', 'sleep', 'diaper', 'med', 'note', 'activity', 'pump', 'measure', 'milestone', 'vaccine'] },
   invite_shared: {},
 } as const
 

@@ -63,6 +63,9 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
       ? { weight: measureInputText('weight', first.weightG, bodyUnits(unit)), length: measureInputText('length', first.lengthMm, bodyUnits(unit)), head: measureInputText('head', first.headMm, bodyUnits(unit)) }
       : EMPTY_MEASURE_TEXT,
   )
+  const [vaccineDose, setVaccineDose] = useState(first.kind === 'vaccine' ? String(first.dose ?? '') : '')
+  const [place, setPlace] = useState(first.kind === 'vaccine' ? (first.place ?? '') : '')
+  const [lot, setLot] = useState(first.kind === 'vaccine' ? (first.lot ?? '') : '')
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
 
@@ -89,6 +92,7 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
         if (e.kind === 'med') draft = { ...draft, name: name.trim(), doseMl: toMl(dose, 'ml') }
         if (e.kind === 'activity') draft = { ...draft, type: activity, durationMin: toInt(minutes) }
         if (e.kind === 'measure') draft = { ...draft, ...measureDraft(growth, bodyUnits(unit)) }
+        if (e.kind === 'vaccine') draft = { ...draft, dose: toInt(vaccineDose), place: place.trim() || undefined, lot: lot.trim() || undefined }
         if (e.kind === 'pump') {
           draft = { ...draft, amountMl: toMl(pumpAmount, unit), side: pumpSide || undefined, durationMin: toInt(minutes) }
         }
@@ -224,6 +228,23 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
             <label className="field">
               <span className="field-label">Minutes</span>
               <input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            </label>
+          </>
+        )}
+
+        {first.kind === 'vaccine' && (
+          <>
+            <label className="field">
+              <span className="field-label">Dose number (optional)</span>
+              <input inputMode="numeric" value={vaccineDose} onChange={(e) => setVaccineDose(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Where (optional)</span>
+              <input value={place} maxLength={80} onChange={(e) => setPlace(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Lot number (optional)</span>
+              <input value={lot} maxLength={40} onChange={(e) => setLot(e.target.value)} />
             </label>
           </>
         )}

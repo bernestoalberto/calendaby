@@ -86,6 +86,45 @@ describe('SqliteEventStore', () => {
     expect((await again.listFeatures()).find((f) => f.id === 'growth')?.enabled).toBe(false)
   })
 
+  it('keeps a vaccination, offers the Vaccines switch and the starting list, and keeps a custom one across reopen', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    await store.append({ kind: 'vaccine', at: 1_000_000, vaccineId: 'dtap', label: 'DTaP', dose: 1 }, 'dad')
+    expect(store.list()).toMatchObject([{ kind: 'vaccine', vaccineId: 'dtap', dose: 1 }])
+    expect((await store.listFeatures()).find((f) => f.id === 'vaccines')).toMatchObject({ label: 'Vaccines', enabled: true })
+    expect((await store.listVaccineTypes()).map((t) => t.id)).toContain('mmr')
+    await store.addVaccineType('Yellow fever')
+    const again = await SqliteEventStore.open(db)
+    expect((await again.listVaccineTypes()).at(-1)).toEqual({ id: 'yellow-fever', label: 'Yellow fever' })
+    expect(again.list()).toHaveLength(1)
+  })
+
+  it('does not turn the Vaccines switch back on or bring back a removed vaccine after a reopen', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db)
+    await store.setFeature('vaccines', false)
+    const again = await SqliteEventStore.open(db)
+    expect((await again.listFeatures()).find((f) => f.id === 'vaccines')?.enabled).toBe(false)
+  })
+
+  it('logs the same dose of a vaccine once, but another dose or vaccine the same day is fine', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const dose = (vaccineId: string, d?: number) => store.append({ kind: 'vaccine', at: 1_000_000, vaccineId, label: vaccineId, dose: d }, 'dad')
+    await dose('dtap', 1)
+    await expect(dose('dtap', 1)).rejects.toThrow(DuplicateEventError)
+    await expect(dose('dtap', 2)).resolves.toBeDefined()
+    await expect(dose('hib', 1)).resolves.toBeDefined()
+  })
+
+  it('refuses a vaccination dated in the future, when logging and when editing', async () => {
+    const store = await SqliteEventStore.open(new NodeSqlDriver())
+    const future = Date.now() + 3 * 86_400_000
+    await expect(store.append({ kind: 'vaccine', at: future, vaccineId: 'dtap', label: 'DTaP' }, 'dad')).rejects.toThrow(/future/i)
+    const ok = await store.append({ kind: 'vaccine', at: 1_000_000, vaccineId: 'dtap', label: 'DTaP' }, 'dad')
+    await expect(store.update(ok.id, { kind: 'vaccine', at: future, vaccineId: 'dtap', label: 'DTaP' })).rejects.toThrow(/future/i)
+    expect(store.list()).toHaveLength(1)
+  })
+
   it('rejects a duplicate logged by the other caregiver a minute later', async () => {
     const store = await SqliteEventStore.open(new NodeSqlDriver())
     await store.append({ kind: 'feed', at: 1_000_000, method: 'bottle', amountMl: 120 }, 'dad')

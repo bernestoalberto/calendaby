@@ -2,6 +2,7 @@ import { DEFAULT_ACTIVITY_TYPES } from './activities'
 import { DEFAULT_AGE_NORMS } from './ageNorms'
 import { DEFAULT_FEATURES } from './features'
 import { DEFAULT_SLEEP_NEEDS } from './sleepGoal'
+import { DEFAULT_VACCINE_TYPES } from './vaccines'
 import { DEFAULT_MILESTONES } from '../knowledge/milestones'
 import { WHO_GROWTH_REFERENCE } from './growthReference'
 import { DEFAULT_LISTS, DEFAULT_SETTINGS, OPTION_LISTS } from './options'
@@ -94,6 +95,20 @@ export const SEEDS: Seed[] = [
     statements: [
       `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'aiInsights', 'Insights', 'Short notes from the assistant about growth, milestones and sleep', 'Today', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
       `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'alertInsights', 'New insight', 'A note when the assistant has something new', 'Notifications', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
+  },
+  {
+    id: 'vaccineTypes-v1',
+    since: Infinity,
+    statements: DEFAULT_VACCINE_TYPES.map(
+      (t, i) => `INSERT OR IGNORE INTO vaccine_type (id, label, sort) VALUES (${sqlText(t.id)}, ${sqlText(t.label)}, ${i})`,
+    ),
+  },
+  {
+    id: 'features-vaccines-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'vaccines', 'Vaccines', 'Vaccination record and the CDC schedule for the age', 'Log', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
     ],
   },
   {

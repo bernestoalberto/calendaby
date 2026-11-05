@@ -7,6 +7,7 @@ import type { FeatureRow } from './features'
 import type { GrowthRef } from './growthReference'
 import { InsightCard } from './insights'
 import type { SleepNeed } from './sleepGoal'
+import { vaccineId, vaccineProblem, type VaccineType } from './vaccines'
 import type { Milestone } from '../knowledge/milestones'
 import { DEFAULT_LISTS, OPTION_LISTS, optionProblem, type ListId } from './options'
 import { SEEDS, type Seed } from './seeds'
@@ -37,7 +38,8 @@ export function findDuplicate(events: BabyEvent[], draft: DraftEvent): BabyEvent
       Math.abs(e.at - draft.at) < DUPLICATE_WINDOW_MS &&
       (e.kind !== 'sleep' || draft.kind !== 'sleep' || e.phase === draft.phase) &&
       (e.kind !== 'activity' || draft.kind !== 'activity' || e.type === draft.type) &&
-      (e.kind !== 'milestone' || draft.kind !== 'milestone' || (e.milestoneId === draft.milestoneId && e.state === draft.state)),
+      (e.kind !== 'milestone' || draft.kind !== 'milestone' || (e.milestoneId === draft.milestoneId && e.state === draft.state)) &&
+      (e.kind !== 'vaccine' || draft.kind !== 'vaccine' || (e.vaccineId === draft.vaccineId && e.dose === draft.dose)),
   )
 }
 
@@ -46,7 +48,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const SCHEMA_VERSION = 14
+const SCHEMA_VERSION = 15
 
 // An entry this phone already had keeps its origin; the server also sends back what this phone uploaded.
 const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, logged_by, body, created_at, remote)
@@ -178,7 +180,20 @@ const MIGRATIONS: Record<number, string[]> = {
       dismissed INTEGER NOT NULL DEFAULT 0
     )`,
   ],
+  // The vaccines a parent can pick from, planted by the vaccineTypes seed. Each vaccination given is an event, not a row here.
+  15: [
+    `CREATE TABLE IF NOT EXISTS vaccine_type (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      sort INTEGER NOT NULL
+    )`,
+  ],
 }
+
+const LIST_VACCINE_TYPES_SQL = 'SELECT id, label FROM vaccine_type ORDER BY sort, label'
+const GET_VACCINE_TYPE_SQL = 'SELECT id, label FROM vaccine_type WHERE id = ?'
+const ADD_VACCINE_TYPE_SQL =
+  'INSERT OR IGNORE INTO vaccine_type (id, label, sort) VALUES (?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM vaccine_type))'
 
 const INSERT_INSIGHT_SQL = 'INSERT OR IGNORE INTO insight (id, created_at, topic, title, body, sources) VALUES (?, ?, ?, ?, ?, ?)'
 const LIST_INSIGHTS_SQL = 'SELECT id, created_at AS createdAt, topic, title, body, sources FROM insight WHERE dismissed = 0 ORDER BY created_at DESC, id LIMIT ?'
@@ -356,6 +371,8 @@ export class SqliteEventStore implements EventStore {
   }
 
   async append(draft: DraftEvent, loggedBy: string): Promise<BabyEvent> {
+    const problem = vaccineProblem(draft, Date.now())
+    if (problem) throw new Error(problem)
     const dup = findDuplicate(this.events, draft)
     if (dup) throw new DuplicateEventError(dup)
     const event = BabyEvent.parse({ ...draft, id: this.newId(), loggedBy })
@@ -374,6 +391,8 @@ export class SqliteEventStore implements EventStore {
   async update(id: string, draft: DraftEvent): Promise<BabyEvent> {
     const existing = this.events.find((e) => e.id === id)
     if (!existing) throw new Error('That entry no longer exists')
+    const problem = vaccineProblem(draft, Date.now())
+    if (problem) throw new Error(problem)
     const event = BabyEvent.parse({ ...draft, id, loggedBy: existing.loggedBy })
     await this.db.exec('UPDATE events SET kind = ?, at = ?, body = ? WHERE id = ?', [event.kind, event.at, JSON.stringify(event), id])
     await this.queue(id, 'put')
@@ -521,6 +540,19 @@ export class SqliteEventStore implements EventStore {
       [id, label.trim()],
     )
     const [row] = await this.db.query<ActivityType>('SELECT id, label FROM activity_types WHERE id = ?', [id])
+    return row
+  }
+
+  async listVaccineTypes(): Promise<VaccineType[]> {
+    return this.db.query<VaccineType>(LIST_VACCINE_TYPES_SQL)
+  }
+
+  /** Adds a custom vaccine ("Yellow fever"); returns the existing one when the id is taken. */
+  async addVaccineType(label: string): Promise<VaccineType> {
+    const id = vaccineId(label)
+    if (!id) throw new Error('Give the vaccine a name')
+    await this.db.exec(ADD_VACCINE_TYPE_SQL, [id, label.trim()])
+    const [row] = await this.db.query<VaccineType>(GET_VACCINE_TYPE_SQL, [id])
     return row
   }
 

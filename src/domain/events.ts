@@ -92,6 +92,20 @@ export const MilestoneEvent = z.object({
   text: z.string().min(1).max(240),
 })
 
+/**
+ * A vaccination given. `vaccineId` is an id from the `vaccine_type` table (a parent can add their own); `label` is kept
+ * so the Timeline can show it without a lookup. `at` is the day it was given. Free text is capped.
+ */
+export const VaccineEvent = z.object({
+  ...base,
+  kind: z.literal('vaccine'),
+  vaccineId: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(40),
+  label: z.string().min(1).max(80),
+  dose: z.number().int().min(1).max(5).optional(),
+  place: z.string().max(80).optional(),
+  lot: z.string().max(40).optional(),
+})
+
 export const BabyEvent = z.discriminatedUnion('kind', [
   FeedEvent,
   SleepEvent,
@@ -102,6 +116,7 @@ export const BabyEvent = z.discriminatedUnion('kind', [
   PumpEvent,
   MeasureEvent,
   MilestoneEvent,
+  VaccineEvent,
 ])
 export type BabyEvent = z.infer<typeof BabyEvent>
 export type EventKind = BabyEvent['kind']
@@ -126,4 +141,5 @@ export const DraftEventSchema = z.discriminatedUnion('kind', [
   PumpEvent.omit(omitStored),
   MeasureBase.omit(omitStored).refine(hasValue, NEEDS_VALUE),
   MilestoneEvent.omit(omitStored),
+  VaccineEvent.omit(omitStored),
 ])
