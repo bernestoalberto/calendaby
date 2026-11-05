@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { BabyEvent, DraftEventSchema, MeasureEvent, MilestoneEvent, type DraftEvent } from '../domain/events.js'
+import { BabyEvent, DraftEventSchema, MeasureEvent, MilestoneEvent, VaccineEvent, type DraftEvent } from '../domain/events.js'
 import { InsightCard } from '../domain/insights.js'
 import { parseLog, type CaptureAgent, type CaptureResult } from './capture.js'
 
@@ -13,6 +13,7 @@ export const AgentRequest = z.object({
   sex: z.enum(['girl', 'boy']).optional(), // Profile; only used for WHO growth percentiles
   marks: z.array(MilestoneEvent).max(400).optional(), // the parent's milestone answers, for the same reason
   measures: z.array(MeasureEvent).max(200).optional(), // every growth reading, since the 500 latest events may not reach back to them
+  vaccines: z.array(VaccineEvent).max(200).optional(), // the vaccination record, for the same reason
 })
 export type AgentRequest = z.infer<typeof AgentRequest>
 

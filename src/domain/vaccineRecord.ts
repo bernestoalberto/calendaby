@@ -1,7 +1,7 @@
-import { CHECKUPS } from '../knowledge/checkups'
-import { SOURCES, type Source } from '../knowledge/sources'
-import type { BabyEvent } from './events'
-import type { VaccineType } from './vaccines'
+import { CHECKUPS } from '../knowledge/checkups.js'
+import { SOURCES, type Source } from '../knowledge/sources.js'
+import type { BabyEvent } from './events.js'
+import type { VaccineType } from './vaccines.js'
 
 type Vaccine = Extract<BabyEvent, { kind: 'vaccine' }>
 
@@ -45,6 +45,12 @@ function names(label: string): string[] {
 
 const mentions = (text: string, type: VaccineType) => names(type.label).some((n) => text.toLowerCase().includes(n))
 
+/** The vaccines a schedule line names, each with how many doses of it are recorded. */
+export function matchListed(text: string, types: VaccineType[], events: BabyEvent[]): ListedMatch[] {
+  const given = events.filter((e): e is Vaccine => e.kind === 'vaccine')
+  return types.filter((t) => mentions(text, t)).map((t) => ({ label: t.label, doses: given.filter((g) => g.vaccineId === t.id).length }))
+}
+
 /**
  * The vaccination record beside the CDC schedule for the baby's age. It reports what is recorded and what the schedule
  * lists; it never says a dose is due, late or missed, because that is the pediatrician's call.
@@ -64,12 +70,7 @@ export function vaccineView(events: BabyEvent[], types: VaccineType[], ageWeeks:
       if (!visit) continue
       rows.push({
         label: visit.label,
-        items: visit.vaccines.map((text) => ({
-          text,
-          matches: types
-            .filter((t) => mentions(text, t))
-            .map((t) => ({ label: t.label, doses: given.filter((g) => g.vaccineId === t.id).length })),
-        })),
+        items: visit.vaccines.map((text) => ({ text, matches: matchListed(text, types, events) })),
       })
     }
   }

@@ -44,6 +44,7 @@ import { eventTitle } from './ui/kinds'
 import type { GrowthRef, Sex } from './domain/growthReference'
 import { bodyUnits, growthTiles } from './domain/growth'
 import { vaccineProblem, type VaccineType } from './domain/vaccines'
+import { vaccineWithoutDetails, withoutVaccineDetails } from './domain/vaccineReport'
 import { Growth } from './ui/Growth'
 import { Vaccines } from './ui/Vaccines'
 import { InsightCards } from './ui/InsightCards'
@@ -391,7 +392,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         now: isoWithOffset(new Date(at)),
         birth: birth || undefined,
         sex: babySex,
-        events: events.slice(-500),
+        events: events.map(withoutVaccineDetails).slice(-500),
         measures: events.filter((e) => e.kind === 'measure').slice(-200),
         marks: events.filter((e) => e.kind === 'milestone').slice(-400),
       })
@@ -606,7 +607,9 @@ function Tracker({ store }: { store: SqliteEventStore }) {
         birth: birth || undefined,
         sex: babySex,
         measures: events.filter((e) => e.kind === 'measure').slice(-200),
-        events: events.slice(-500),
+        // Only the vaccine, dose and date leave the phone: where it was given, the lot number and notes stay on it.
+        vaccines: events.filter((e) => e.kind === 'vaccine').map(vaccineWithoutDetails).slice(-200),
+        events: events.map(withoutVaccineDetails).slice(-500),
       })
       const { added } = await logAll(res.drafts)
       setOnline(true)

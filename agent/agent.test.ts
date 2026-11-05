@@ -73,6 +73,39 @@ describe('getGrowth', () => {
   })
 })
 
+describe('getVaccines', () => {
+  const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } }
+  const stop = { content: [{ type: 'text' as const, text: 'ok' }], finishReason: { unified: 'stop' as const, raw: 'stop' }, usage, warnings: [] }
+  const call = { content: [{ type: 'tool-call' as const, toolCallId: 't1', toolName: 'getVaccines', input: '{}' }], finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' }, usage, warnings: [] }
+  const req: AgentRequest = {
+    mode: 'chat',
+    prompt: 'Is she up to date on her shots?',
+    now: '2026-11-05T12:00:00+00:00',
+    birth: '2026-08-25',
+    vaccines: [{ id: 'v1', kind: 'vaccine', at: Date.parse('2026-10-28T12:00:00Z'), loggedBy: 'mom', vaccineId: 'dtap', label: 'DTaP', dose: 1, place: 'Dr Lee', lot: 'AB1', note: 'fussy' }],
+  }
+
+  it('returns only the recorded doses and the cited schedule for the age, never place, lot or notes', async () => {
+    const model = new MockLanguageModelV4({ doGenerate: [call, stop] })
+    await runAgent(req, openDb(':memory:'), model)
+    const tool = JSON.stringify(model.doGenerateCalls[1].prompt.filter((m) => m.role === 'tool'))
+    expect(tool).toContain('DTaP')
+    expect(tool).toContain('2026-10-28')
+    expect(tool).toContain('listedForAge')
+    expect(tool).not.toMatch(/Dr Lee|AB1|fussy/)
+  })
+
+  it('is a chat tool only, and the chat prompt forbids saying a vaccine is due or late', async () => {
+    const model = new MockLanguageModelV4({ doGenerate: stop })
+    await runAgent(req, openDb(':memory:'), model)
+    expect((model.doGenerateCalls[0].tools ?? []).map((t) => t.name)).toContain('getVaccines')
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toMatch(/never say a vaccine is due/i)
+    const insights = new MockLanguageModelV4({ doGenerate: stop })
+    await runAgent({ ...req, mode: 'insights', prompt: 'insights' }, openDb(':memory:'), insights)
+    expect((insights.doGenerateCalls[0].tools ?? []).map((t) => t.name)).not.toContain('getVaccines')
+  })
+})
+
 describe('insights mode', () => {
   const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } }
   const stop = { content: [{ type: 'text' as const, text: 'done' }], finishReason: { unified: 'stop' as const, raw: 'stop' }, usage, warnings: [] }

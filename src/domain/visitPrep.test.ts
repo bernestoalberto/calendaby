@@ -30,6 +30,21 @@ describe('visitPrep', () => {
     expect(prep.expect.some((l) => /fever/i.test(l.text))).toBe(true)
   })
 
+  it('names the listed vaccines already in the vaccination record, and leaves the decision to the doctor', () => {
+    const given = { id: 'v1', kind: 'vaccine', at: now - 2 * WEEK, loggedBy: 'mom', vaccineId: 'dtap', label: 'DTaP', dose: 1 } as BabyEvent
+    const prep = visitPrep(visit('4 month checkup', now + 3 * 24 * HOUR), 'EJ', born(17), [given], now)
+    const line = prep.plan.find((l) => l.includes('vaccination record'))
+    expect(line).toContain('DTaP (1 dose)')
+    expect(line).toMatch(/doctor decides/i)
+    expect(prep.plan.join(' ')).not.toMatch(/overdue|missed|behind/i)
+  })
+
+  it('adds nothing about vaccines when none are recorded or the visit lists none', () => {
+    expect(visitPrep(visit('4 month checkup', now + 3 * 24 * HOUR), 'EJ', born(17), [], now).plan.join(' ')).not.toContain('vaccination record')
+    const given = { id: 'v1', kind: 'vaccine', at: now, loggedBy: 'mom', vaccineId: 'dtap', label: 'DTaP' } as BabyEvent
+    expect(visitPrep(visit('9 month checkup', now + 3 * 24 * HOUR), 'EJ', born(39), [given], now).plan.join(' ')).not.toContain('vaccination record')
+  })
+
   it('has no expectations for a visit that is not a checkup, but still plans the day', () => {
     const prep = visitPrep(visit('Dentist for mom', now + 24 * HOUR), 'EJ', born(17), [], now)
     expect(prep.expect).toEqual([])

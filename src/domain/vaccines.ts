@@ -1,5 +1,5 @@
-import type { DraftEvent } from './events'
-import { activityId } from './activities'
+import type { DraftEvent } from './events.js'
+import { activityId } from './activities.js'
 
 /** One row of the `vaccine_type` table. */
 export type VaccineType = { id: string; label: string }

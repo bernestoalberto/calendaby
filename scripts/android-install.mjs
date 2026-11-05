@@ -2,7 +2,7 @@
 // is connected it installs the APK and opens the app; otherwise it skips the install and still exits 0.
 // Works on Windows, macOS and Linux. Needs adb on PATH and USB debugging on to install.
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const win = process.platform === 'win32'
@@ -10,14 +10,23 @@ const android = join(process.cwd(), 'android')
 const appId = 'com.calendaby.app'
 const apk = join(android, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk')
 
-// A stale JAVA_HOME (an uninstalled JDK) breaks Gradle; fall back to Android Studio's bundled JDK.
+// A JDK is usable only if it has a java binary: a folder left behind by an interrupted Android Studio update exists but is empty.
+const javaBin = (home) => join(home, 'bin', win ? 'java.exe' : 'java')
+const usableJdk = (home) => Boolean(home) && existsSync(javaBin(home.trim()))
+
+// Android Studio can sit in "Android Studio", "Android Studio1" and so on.
+function studioJdks() {
+  const root = 'C:/Program Files/Android'
+  const windows = existsSync(root) ? readdirSync(root).filter((d) => d.startsWith('Android Studio')).map((d) => `${root}/${d}/jbr`) : []
+  return [...windows, '/Applications/Android Studio.app/Contents/jbr/Contents/Home', '/opt/android-studio/jbr']
+}
+
+// A stale JAVA_HOME (an uninstalled JDK, or a stray space at the end) breaks Gradle; fall back to Android Studio's bundled JDK.
 const env = { ...process.env }
-if (!env.JAVA_HOME || !existsSync(env.JAVA_HOME)) {
-  const studioJdk = [
-    'C:/Program Files/Android/Android Studio/jbr',
-    '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
-    '/opt/android-studio/jbr',
-  ].find(existsSync)
+if (usableJdk(env.JAVA_HOME)) {
+  env.JAVA_HOME = env.JAVA_HOME.trim()
+} else {
+  const studioJdk = studioJdks().find(usableJdk)
   if (studioJdk) env.JAVA_HOME = studioJdk
 }
 

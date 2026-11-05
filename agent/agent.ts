@@ -8,6 +8,7 @@ import { googleTools, type Google } from './google.js'
 import { DEFAULT_AGE_NORMS, normFor } from '../src/domain/ageNorms.js'
 import { dailyStats } from '../src/domain/analytics.js'
 import { growthReport } from '../src/domain/growth.js'
+import { vaccineReport } from '../src/domain/vaccineReport.js'
 import { ModelInsights, SOURCE_IDS, sanitizeInsights, type InsightCard } from '../src/domain/insights.js'
 import { milestoneReport, wholeMonths } from '../src/domain/milestones.js'
 import { DEFAULT_MILESTONES } from '../src/knowledge/milestones.js'
@@ -71,6 +72,7 @@ Deduce patterns from the baby's own history (wake windows, nap lengths, feeding 
 For "when will" or "when is the next" questions, use getOutlook and state only the times and ranges it returns, with their basis.
 For questions about milestones or development, call getMilestones and state only what it returns; the answers in it are the parent's own.
 For questions about weight, length, head size, growth or percentiles, call getGrowth and state only the numbers, dates and percentiles it returns.
+For questions about vaccines or shots, call getVaccines and state only what it returns. Never say a vaccine is due, overdue or missed, or that the baby is up to date or behind, and never advise giving or skipping one; send those questions to the pediatrician.
 For general baby-care questions (sleep, feeding, solids, diapers, development, checkups, warning signs), use pediatric_guide.
 Be brief and kind.
 Format every answer for a small phone screen, in plain text with only this markup:
@@ -238,6 +240,12 @@ export async function runAgent(
     inputSchema: z.object({}),
     execute: () => milestoneReport(DEFAULT_MILESTONES, req.marks ?? [], wholeMonths(req.birth, Date.parse(req.now))),
   })
+  const getVaccines = tool({
+    description:
+      "The baby's vaccination record (vaccine, dose number and date) and what the CDC schedule lists for the baby's age, with how many doses of each are recorded. It reports the record and the schedule; it does not say what is due. If a vaccine is not in the record, say it has not been recorded.",
+    inputSchema: z.object({}),
+    execute: () => vaccineReport(req.vaccines ?? [], weeksOld(req.birth, Date.parse(req.now)), (ms) => localTime(ms, req.now).slice(0, 10)),
+  })
   const publishInsights = tool({
     description: `Publish the insight cards. Each card: topic, title, body and sources (ids from: ${SOURCE_IDS.join(', ')}).`,
     inputSchema: ModelInsights,
@@ -275,6 +283,7 @@ export async function runAgent(
             getOutlook,
             getGrowth,
             getMilestones,
+            getVaccines,
             listEvents,
             record_events: recordEvents,
             pediatric_guide: pediatricGuide,

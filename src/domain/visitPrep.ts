@@ -7,6 +7,8 @@ import { LEAVE_LEAD_MS } from './appointmentAlerts.js'
 import type { BabyEvent } from './events.js'
 import { feedForecast } from './predictions.js'
 import { formatMinutes } from './summary.js'
+import { matchListed } from './vaccineRecord.js'
+import { DEFAULT_VACCINE_TYPES } from './vaccines.js'
 
 export interface PrepLine {
   text: string
@@ -28,10 +30,24 @@ function clockText(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+function nearestVisit(ageWeeks: number) {
+  const nearest = CHECKUPS.us.visits.reduce((best, v) => (Math.abs(v.at - ageWeeks) < Math.abs(best.at - ageWeeks) ? v : best))
+  return Math.abs(nearest.at - ageWeeks) > SAME_VISIT_WEEKS ? undefined : nearest
+}
+
+/** The vaccines this visit lists that are already in the vaccination record. The doctor decides what is due. */
+function recordedLine(events: BabyEvent[], visit: { vaccines: string[] }): string | undefined {
+  const found = new Map<string, number>()
+  for (const text of visit.vaccines) for (const m of matchListed(text, DEFAULT_VACCINE_TYPES, events)) if (m.doses > 0) found.set(m.label, m.doses)
+  if (found.size === 0) return undefined
+  const names = [...found].map(([label, doses]) => `${label} (${doses} ${doses === 1 ? 'dose' : 'doses'})`).join(', ')
+  return `Already in your vaccination record and named for this visit: ${names}. The doctor decides what is due.`
+}
+
 function expectations(ageWeeks: number): PrepLine[] {
   const schedule = CHECKUPS.us
-  const nearest = schedule.visits.reduce((best, v) => (Math.abs(v.at - ageWeeks) < Math.abs(best.at - ageWeeks) ? v : best))
-  if (Math.abs(nearest.at - ageWeeks) > SAME_VISIT_WEEKS) return []
+  const nearest = nearestVisit(ageWeeks)
+  if (!nearest) return []
 
   const lines: PrepLine[] = [
     { text: `This looks like the ${nearest.label} checkup. The doctor usually checks growth, feeding, sleep and development.`, source: SOURCES.medlineWellChild },
@@ -66,5 +82,7 @@ export function visitPrep(a: Appointment, baby: string, birth: string | undefine
     plan.push('Add the birth date in Profile to see what is usually covered at this visit.')
     return { expect: [], plan }
   }
+  const line = recordedLine(events, nearestVisit(age) ?? { vaccines: [] })
+  if (line) plan.push(line)
   return { expect: expectations(age), plan }
 }
