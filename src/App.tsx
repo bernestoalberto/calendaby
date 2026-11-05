@@ -45,6 +45,7 @@ import type { GrowthRef, Sex } from './domain/growthReference'
 import { bodyUnits, growthTiles } from './domain/growth'
 import { vaccineProblem, type VaccineType } from './domain/vaccines'
 import { Growth } from './ui/Growth'
+import { Vaccines } from './ui/Vaccines'
 import { InsightCards } from './ui/InsightCards'
 import { insightAlert, insightSignature, insightsDue } from './domain/insights'
 import type { StoredInsight } from './domain/store'
@@ -80,7 +81,7 @@ function numberSetting(stored: string | undefined, fallback: string, min: number
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
-type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'growth' | 'calendar' | 'agent' | 'profile'
+type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'growth' | 'vaccines' | 'calendar' | 'agent' | 'profile'
 const TWO_WEEKS = 14 * 24 * 3_600_000
 const GMAIL_CHECK_MS = 30 * 60_000
 type Toast = { text: string; undo?: BabyEvent[] }
@@ -229,6 +230,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const sessions = useMemo(() => sleepSessions(events), [events])
   const forecast = useMemo(() => napForecast(events, now), [events, now])
   const weeks = weeksOld(birth, now)
+  const lastVaccine = useMemo(() => events.filter((e): e is Extract<BabyEvent, { kind: 'vaccine' }> => e.kind === 'vaccine').at(-1), [events])
   const checkup = weeks === undefined ? undefined : nextCheckups(weeks, 'us', 1)[0]
   const view = useMemo(() => outlook(events, normFor(ageNorms, weeks), weeks, now), [events, ageNorms, weeks, now])
   const agenda = useMemo(
@@ -766,6 +768,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     log: 'Log',
     analytics: 'Analytics',
     growth: 'Growth & milestones',
+    vaccines: 'Vaccines',
     calendar: 'Calendar',
     agent: 'Agent',
     profile: 'Profile',
@@ -831,6 +834,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onQuick={openLog}
             onFullStats={() => setTab('analytics')}
             onGrowth={() => setTab('growth')}
+            onVaccines={() => setTab('vaccines')}
+            lastVaccine={lastVaccine}
             insights={insights}
             onDismissInsight={(id) => void dismissInsight(id)}
             growth={growthTiles(events, bodyUnits(unit), babySex, birth || undefined, growthRef)}
@@ -905,6 +910,19 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             )}
             {on('milestones') && <Milestones baby={baby} milestones={milestones} events={events} months={wholeMonths(birth || undefined, now)} onMark={(m, state) => void markMilestone(m, state)} />}
           </div>
+        )}
+        {tab === 'vaccines' && on('vaccines') && (
+          <Vaccines
+            baby={baby}
+            events={events}
+            types={vaccineTypes}
+            ageWeeks={weeks}
+            onAdd={() => {
+              setLogTab('vaccine')
+              setTab('log')
+            }}
+            onEdit={setEditing}
+          />
         )}
         {tab === 'calendar' && on('calendar') && (
           <Calendar

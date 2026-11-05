@@ -69,6 +69,9 @@ interface Props {
   onQuick: (k: QuickKind) => void
   onFullStats: () => void
   onGrowth: () => void
+  onVaccines: () => void
+  /** The most recent vaccination recorded, if any. */
+  lastVaccine?: Extract<BabyEvent, { kind: 'vaccine' }>
   /** The latest weight, length and head size, read-only. */
   growth: GrowthTile[]
   /** Notes the assistant wrote; shown newest first. */
@@ -272,6 +275,27 @@ export function Today(p: Props) {
             </div>
           ) : (
             <p className="muted small">No measurements yet. Add weight, length or head size from Log &gt; Growth.</p>
+          )}
+        </section>
+      )}
+
+      {p.on('vaccines') && (
+        <section className="card" aria-label="Vaccines">
+          <div className="card-head">
+            <h3>
+              <PillIcon width={18} height={18} /> Vaccines
+            </h3>
+            <button type="button" className="link" onClick={p.onVaccines}>
+              Vaccination record <ChevronRightIcon width={16} height={16} />
+            </button>
+          </div>
+          {p.lastVaccine ? (
+            <p className="muted small">
+              Last recorded: {p.lastVaccine.label}
+              {p.lastVaccine.dose ? `, dose ${p.lastVaccine.dose}` : ''}, {new Date(p.lastVaccine.at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}.
+            </p>
+          ) : (
+            <p className="muted small">No vaccines recorded yet. Add them from Log &gt; Vaccines.</p>
           )}
         </section>
       )}
