@@ -4,6 +4,9 @@ export function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** The calendar day on the parent's clock as YYYY-MM-DD. `toISOString()` gives the UTC day, which is tomorrow's date for an evening entry west of UTC. */
+export const localDay = (ms: number): string => toLocalInput(ms).slice(0, 10)
+
 export function fromLocalInput(value: string): number | undefined {
   const ms = new Date(value).getTime()
   return Number.isNaN(ms) ? undefined : ms

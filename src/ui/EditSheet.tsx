@@ -255,7 +255,11 @@ export function EditSheet({ events, unit, types, onSave, onClose }: Readonly<Pro
           <span className="field-label">{first.kind === 'note' ? 'Note' : 'Note (optional)'}</span>
           <textarea value={note} rows={3} onChange={(e) => setNote(e.target.value)} />
         </label>
-        {error && <p className="warning">{error}</p>}
+        {error && (
+          <p className="warning" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </Sheet>
   )

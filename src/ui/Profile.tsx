@@ -11,7 +11,7 @@ import { Family } from './Family'
 import type { SyncStatus } from './useSync'
 import { FaceIcon, MoonIcon, ShareIcon } from './icons'
 import { SEX_CHOICES } from '../domain/growth'
-import { babyAge, type Unit } from './time'
+import { babyAge, localDay, type Unit } from './time'
 
 interface Props {
   features: FeatureRow[]
@@ -84,7 +84,7 @@ export function Profile(p: Readonly<Props>) {
         </label>
         <label className="field">
           <span className="field-label">Birth date</span>
-          <input type="date" defaultValue={p.birth} max={new Date(p.now).toISOString().slice(0, 10)} onChange={(e) => p.onSetting('birth', e.target.value)} />
+          <input type="date" defaultValue={p.birth} max={localDay(p.now)} onChange={(e) => p.onSetting('birth', e.target.value)} />
         </label>
         <label className="field">
           <span className="field-label">Sex (for growth charts, optional)</span>

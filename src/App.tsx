@@ -55,7 +55,7 @@ import { milestoneReport, wholeMonths, type MilestoneState } from './domain/mile
 import type { Milestone } from './knowledge/milestones'
 import type { LogTab } from './ui/Logger'
 import { applyTheme, sectionProps, ThemeContext } from './ui/themeContext'
-import { babyAge, type Unit } from './ui/time'
+import { babyAge, localDay, type Unit } from './ui/time'
 import { useSync } from './ui/useSync'
 import { Today } from './ui/Today'
 import { forgetPendingJoin, peekPendingJoin } from './pendingJoin'
@@ -542,7 +542,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     logMeasurement: logMeasurementForAssistant,
     growth: () => describeGrowth(growthTiles(events, bodyUnits('ml'), babySex, birth || undefined, growthRef), baby),
     milestones: () => describeMilestones(milestoneReport(milestones, events, wholeMonths(birth || undefined, nowMs())), baby),
-    vaccines: () => describeVaccines(vaccineReport(events.filter((e) => e.kind === 'vaccine'), weeksOld(birth || undefined, nowMs()), (ms) => new Date(ms).toISOString().slice(0, 10)), baby),
+    vaccines: () => describeVaccines(vaccineReport(events.filter((e) => e.kind === 'vaccine'), weeksOld(birth || undefined, nowMs()), localDay), baby),
     insights: () => describeInsights(insights, baby),
   }
   useEffect(
