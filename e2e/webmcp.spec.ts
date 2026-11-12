@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-  await page.waitForFunction(() => Object.keys(window.__tools).length === 8)
+  await page.waitForFunction(() => Object.keys(window.__tools).length === 9)
 })
 
 test('an assistant can log a sentence, and the parent sees it and can undo it', async ({ page }) => {

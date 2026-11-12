@@ -49,6 +49,8 @@ import { vaccineProblem, type VaccineType } from './domain/vaccines'
 import { vaccineReport, vaccineWithoutDetails, withoutVaccineDetails } from './domain/vaccineReport'
 import { Growth } from './ui/Growth'
 import { Vaccines } from './ui/Vaccines'
+import { AppProblem, ErrorBoundary } from './ui/ErrorBoundary'
+import { nextRoutine, routineAlerts, type Routine, type RoutineDraft } from './domain/routines'
 import { InsightCards } from './ui/InsightCards'
 import { insightAlert, insightSignature, insightsDue } from './domain/insights'
 import type { StoredInsight } from './domain/store'
@@ -73,6 +75,7 @@ const Agent = lazy(() => import('./ui/Agent').then((m) => ({ default: m.Agent })
 const Calendar = lazy(() => import('./ui/Calendar').then((m) => ({ default: m.Calendar })))
 const Logger = lazy(() => import('./ui/Logger').then((m) => ({ default: m.Logger })))
 const Profile = lazy(() => import('./ui/Profile').then((m) => ({ default: m.Profile })))
+const Routines = lazy(() => import('./ui/Routines').then((m) => ({ default: m.Routines })))
 const Timeline = lazy(() => import('./ui/Timeline').then((m) => ({ default: m.Timeline })))
 
 /** A stored number, or the seed value when what is stored is missing or unreadable. */
@@ -84,7 +87,7 @@ function numberSetting(stored: string | undefined, fallback: string, min: number
 const capture = new HybridCaptureAgent()
 // Kept out of render so components stay pure.
 const nowMs = () => Date.now()
-type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'growth' | 'vaccines' | 'calendar' | 'agent' | 'profile'
+type Tab = 'today' | 'timeline' | 'activity' | 'log' | 'analytics' | 'growth' | 'vaccines' | 'routines' | 'calendar' | 'agent' | 'profile'
 const TWO_WEEKS = 14 * 24 * 3_600_000
 const GMAIL_CHECK_MS = 30 * 60_000
 type Toast = { text: string; undo?: BabyEvent[] }
@@ -102,9 +105,13 @@ export default function App() {
     storeOpen().then(setStore, (err: unknown) => setFailed(err instanceof Error ? err.message : String(err)))
   }, [])
 
-  if (failed) return <main className="center">{failed}</main>
+  if (failed) return <AppProblem detail={failed} />
   if (!store) return <main className="center">Opening…</main>
-  return <Tracker store={store} />
+  return (
+    <ErrorBoundary>
+      <Tracker store={store} />
+    </ErrorBoundary>
+  )
 }
 
 const toSex = (v: string | undefined): Sex | undefined => (v === 'girl' || v === 'boy' ? v : undefined)
@@ -126,6 +133,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
   const [featureRows, setFeatureRows] = useState<FeatureRow[]>([])
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
   const [vaccineTypes, setVaccineTypes] = useState<VaccineType[]>([])
+  const [routines, setRoutines] = useState<Routine[]>([])
+  const [routineDone, setRoutineDone] = useState<Record<string, number[]>>({})
   const [tummyGoal, setTummyGoal] = useState(() => numberSetting(store.setting('tummyGoal'), DEFAULT_SETTINGS.tummyGoal, 0))
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [editing, setEditing] = useState<BabyEvent[] | null>(null)
@@ -201,6 +210,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     void store.getSetting('theme').then((v) => setTheme(parseTheme(v)))
     void store.listActivityTypes().then(setActivityTypes)
     void store.listVaccineTypes().then(setVaccineTypes)
+    void store.listRoutines().then(setRoutines)
     void store.getSetting('reminders').then((v) => setReminders(v === 'on'))
     void store.getSetting('analytics').then((v) => {
       setShareUsage(v === 'on')
@@ -273,10 +283,11 @@ function Tracker({ store }: { store: SqliteEventStore }) {
           ...(on('alertBriefing') ? [briefingAlert(baby, briefingTime, view.tonight, at)] : []),
           ...(on('alertNoLogs') ? logGapAlert(baby, logGap(events, logGapSetting, at), at) : []),
           ...appointmentAlerts(baby, appointments, events, at),
+          ...(on('routines') && on('alertRoutines') ? routineAlerts(baby, routines, at) : []),
         ]
       : []
     void syncNapNotifications(active, alerts)
-  }, [reminders, notifAccess, baby, events, appointments, on, briefingTime, view.tonight, logGapSetting])
+  }, [reminders, notifAccess, baby, events, appointments, routines, on, briefingTime, view.tonight, logGapSetting])
 
   useEffect(() => {
     const fresh = sleepProblems.filter((p) => !announcedSleep.current.has(p.key))
@@ -727,6 +738,38 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     }
   }
 
+  const today = localDay(now)
+  useEffect(() => {
+    void store.routineDone(today).then(setRoutineDone)
+  }, [store, today])
+  const upNext = useMemo(() => {
+    const next = nextRoutine(routines, now)
+    return next && { ...next, done: routineDone[next.routine.id]?.length ?? 0 }
+  }, [routines, routineDone, now])
+
+  async function saveRoutine(draft: RoutineDraft, id?: string): Promise<string | undefined> {
+    try {
+      await store.saveRoutine(draft, id)
+    } catch (err) {
+      return err instanceof Error ? err.message : "Couldn't save that routine"
+    }
+    setRoutines(await store.listRoutines())
+    setRoutineDone(await store.routineDone(today))
+  }
+
+  async function removeRoutine(id: string) {
+    await store.removeRoutine(id)
+    setRoutines(await store.listRoutines())
+    setRoutineDone(await store.routineDone(today))
+  }
+
+  async function toggleRoutineStep(id: string, step: number, done: boolean) {
+    // Ticks at once; the stored list replaces this when the write finishes.
+    setRoutineDone((d) => ({ ...d, [id]: done ? [...(d[id] ?? []), step] : (d[id] ?? []).filter((s) => s !== step) }))
+    await store.setRoutineStep(id, today, step, done)
+    setRoutineDone(await store.routineDone(today))
+  }
+
   async function addVaccineType(label: string): Promise<VaccineType | undefined> {
     try {
       const added = await store.addVaccineType(label)
@@ -798,6 +841,7 @@ function Tracker({ store }: { store: SqliteEventStore }) {
     analytics: 'Analytics',
     growth: 'Growth & milestones',
     vaccines: 'Vaccines',
+    routines: 'Routines',
     calendar: 'Calendar',
     agent: 'Agent',
     profile: 'Profile',
@@ -865,6 +909,8 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             onFullStats={() => setTab('analytics')}
             onGrowth={() => setTab('growth')}
             onVaccines={() => setTab('vaccines')}
+            onRoutines={() => setTab('routines')}
+            nextRoutine={upNext}
             lastVaccine={lastVaccine}
             insights={insights}
             onDismissInsight={(id) => void dismissInsight(id)}
@@ -953,6 +999,20 @@ function Tracker({ store }: { store: SqliteEventStore }) {
             }}
             onEdit={setEditing}
           />
+        )}
+        {tab === 'routines' && on('routines') && (
+          <div className="stack">
+            <h2 className="page-title">Routines</h2>
+            <Routines
+              baby={baby}
+              now={now}
+              routines={routines}
+              done={routineDone}
+              onToggleStep={(id, step, done) => void toggleRoutineStep(id, step, done)}
+              onSave={saveRoutine}
+              onRemove={(id) => void removeRoutine(id)}
+            />
+          </div>
         )}
         {tab === 'calendar' && on('calendar') && (
           <Calendar

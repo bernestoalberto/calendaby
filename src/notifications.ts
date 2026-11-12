@@ -2,8 +2,13 @@ import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { APPT_ID_BASE, APPT_ID_COUNT } from './domain/appointmentAlerts'
 import { ALL_ALERT_IDS, type NapAlert } from './domain/notifications'
+import { MAX_ROUTINES, ROUTINE_ID_BASE } from './domain/routines'
 
-const CANCEL_IDS = [...ALL_ALERT_IDS, ...Array.from({ length: APPT_ID_COUNT }, (_, i) => APPT_ID_BASE + i)]
+const CANCEL_IDS = [
+  ...ALL_ALERT_IDS,
+  ...Array.from({ length: APPT_ID_COUNT }, (_, i) => APPT_ID_BASE + i),
+  ...Array.from({ length: MAX_ROUTINES }, (_, i) => ROUTINE_ID_BASE + i),
+]
 
 export type NotificationAccess = 'granted' | 'denied' | 'prompt' | 'unsupported'
 

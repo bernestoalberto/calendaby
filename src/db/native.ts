@@ -1,5 +1,5 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
-import type { SqlDriver, SqlValue } from './driver'
+import type { SqlDriver, SqlStatement, SqlValue } from './driver'
 
 /** The device's own SQLite on iOS and Android. */
 export class NativeSqlDriver implements SqlDriver {
@@ -20,6 +20,11 @@ export class NativeSqlDriver implements SqlDriver {
   async exec(sql: string, params: SqlValue[] = []): Promise<void> {
     if (params.length) await this.conn.run(sql, params, false)
     else await this.conn.execute(sql, false)
+  }
+
+  async batch(statements: SqlStatement[]): Promise<void> {
+    if (statements.length === 0) return
+    await this.conn.executeSet(statements.map((s) => ({ statement: s.sql, values: s.params ?? [] })), true)
   }
 
   async query<T extends Record<string, SqlValue>>(sql: string, params: SqlValue[] = []): Promise<T[]> {
