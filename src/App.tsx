@@ -49,6 +49,7 @@ import { vaccineProblem, type VaccineType } from './domain/vaccines'
 import { vaccineReport, vaccineWithoutDetails, withoutVaccineDetails } from './domain/vaccineReport'
 import { Growth } from './ui/Growth'
 import { Vaccines } from './ui/Vaccines'
+import { AppProblem, ErrorBoundary } from './ui/ErrorBoundary'
 import { nextRoutine, routineAlerts, type Routine, type RoutineDraft } from './domain/routines'
 import { InsightCards } from './ui/InsightCards'
 import { insightAlert, insightSignature, insightsDue } from './domain/insights'
@@ -104,9 +105,13 @@ export default function App() {
     storeOpen().then(setStore, (err: unknown) => setFailed(err instanceof Error ? err.message : String(err)))
   }, [])
 
-  if (failed) return <main className="center">{failed}</main>
+  if (failed) return <AppProblem detail={failed} />
   if (!store) return <main className="center">Opening…</main>
-  return <Tracker store={store} />
+  return (
+    <ErrorBoundary>
+      <Tracker store={store} />
+    </ErrorBoundary>
+  )
 }
 
 const toSex = (v: string | undefined): Sex | undefined => (v === 'girl' || v === 'boy' ? v : undefined)

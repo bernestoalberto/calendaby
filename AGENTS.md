@@ -20,6 +20,6 @@ The app is one Node 22 process. `npm ci` installs it (Husky's `prepare` script r
 
 Logging and `npm run check` need no secrets. Without `OPEN_ROUTER_API`, `/api/agent` returns 503 and the assistant stays offline. Without `VITE_CLERK_PUBLISHABLE_KEY` the app runs signed out. Turso and Clerk are only for sharing and sign-in.
 
-`npm run check` is lint, the production build, and Vitest, including a smoke test that boots Vite and calls `listEvents`. Node prints an experimental warning for `node:sqlite`; the suite still passes. Playwright uses the installed Chrome (`npx playwright test`). The case "agent answers a baby question" calls the live model and needs `OPEN_ROUTER_API`. The case "Analytics opens" looks for a nav button the default tab bar does not have (the bar is Today, Timeline, Activity, Log, Calendar, Agent).
+`npm run check` is lint, the production build, and Vitest, including a smoke test that boots Vite and calls `listEvents`. Node prints an experimental warning for `node:sqlite`; the suite still passes. Playwright uses the installed Chrome (`npx playwright test`). The case "agent answers a baby question" calls the live model and needs `OPEN_ROUTER_API`. The "opens" cases follow the default tab bar: Today, Timeline, Activity, Log, Calendar, Agent. The LAN case fails in a sandbox whose network blocks the Vite dev websocket; the app itself loads there.
 
 There is no Android SDK or phone here. Skip the post-commit APK hook with `SKIP_ANDROID_INSTALL=1`. The old Python agent under `agent/*.py` is unused.

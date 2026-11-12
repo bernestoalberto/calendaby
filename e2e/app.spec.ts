@@ -15,7 +15,7 @@ test.afterEach(() => {
   expect(errors).toEqual([])
 })
 
-for (const screen of ['Today', 'Timeline', 'Log', 'Analytics', 'Agent']) {
+for (const screen of ['Today', 'Timeline', 'Activity', 'Log', 'Calendar', 'Agent']) {
   test(`${screen} opens`, async ({ page }) => {
     await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: screen }).click()
     await expect(page.getByRole('heading').first()).toBeVisible()
