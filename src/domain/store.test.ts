@@ -27,6 +27,32 @@ class MapStorage implements Storage {
 }
 
 describe('SqliteEventStore', () => {
+  it('gives routines from the first routines version a state and no start date', async () => {
+    const driver = new NodeSqlDriver()
+    await SqliteEventStore.open(driver)
+    driver.db.exec('ALTER TABLE routine DROP COLUMN state; ALTER TABLE routine DROP COLUMN start_date; PRAGMA user_version = 16')
+    const store = await SqliteEventStore.open(driver)
+    expect(await store.listRoutines()).toMatchObject([{ id: 'bedtime', date: '', state: 'active' }])
+  })
+
+  it('starts with a bedtime routine and keeps edits, ticks and deletes', async () => {
+    const db = new NodeSqlDriver()
+    const store = await SqliteEventStore.open(db, undefined, () => 'r1')
+    const [bed] = await store.listRoutines()
+    expect(bed).toMatchObject({ id: 'bedtime', name: 'Bedtime', date: '', time: '19:00', remind: false, state: 'active' })
+
+    await store.setRoutineStep('bedtime', '2026-11-09', 0, true)
+    await store.saveRoutine({ ...bed, remind: true }, 'bedtime')
+    expect(await store.routineDone('2026-11-09')).toEqual({ bedtime: [0] })
+    await store.saveRoutine({ ...bed, steps: ['Bath'] }, 'bedtime')
+    expect(await store.routineDone('2026-11-09')).toEqual({})
+
+    await store.saveRoutine({ name: 'Morning', date: '2026-11-10', time: '07:00', days: [1, 2], steps: [], remind: false, state: 'paused' })
+    await store.removeRoutine('bedtime')
+    const again = await SqliteEventStore.open(db)
+    expect(await again.listRoutines()).toMatchObject([{ id: 'r1', date: '2026-11-10', state: 'paused' }])
+  })
+
   it('plants the CDC milestones and sleep ranges once', async () => {
     const db = new NodeSqlDriver()
     const store = await SqliteEventStore.open(db)

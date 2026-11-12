@@ -121,6 +121,22 @@ export const SEEDS: Seed[] = [
     ],
   },
   {
+    id: 'features-routines-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'routines', 'Routines', 'Bedtime and other daily routines with steps to tick off', 'Today', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+      `INSERT OR IGNORE INTO features (id, label, hint, grp, sort, enabled) SELECT 'alertRoutines', 'Routine start', 'When a routine with a reminder is due to start', 'Notifications', COALESCE(MAX(sort), 0) + 1, 1 FROM features`,
+    ],
+  },
+  // A starting bedtime routine to edit or delete; reminders stay off until the parent turns them on.
+  {
+    id: 'routines-v1',
+    since: Infinity,
+    statements: [
+      `INSERT OR IGNORE INTO routine (id, name, start_date, time, days, steps, remind, state, sort) VALUES ('bedtime', 'Bedtime', '', '19:00', '[0,1,2,3,4,5,6]', ${sqlText(JSON.stringify(['Bath', 'Pajamas and a fresh diaper', 'Last feed', 'Book or song', 'Lights out']))}, 0, 'active', 0)`,
+    ],
+  },
+  {
     id: 'activityTypes-v1',
     since: 4,
     statements: DEFAULT_ACTIVITY_TYPES.map(

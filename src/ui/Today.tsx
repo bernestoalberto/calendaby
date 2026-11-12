@@ -8,6 +8,7 @@ import type { Checkup } from '../knowledge/checkups'
 import type { DaySummary, SleepSession } from '../domain/summary'
 import type { GrowthTile } from '../domain/growth'
 import type { StoredInsight } from '../domain/store'
+import type { Scheduled } from '../domain/routines'
 import { InsightCards } from './InsightCards'
 import type { SleepIssue } from '../domain/sleepIssues'
 import { formatMinutes } from '../domain/summary'
@@ -23,6 +24,7 @@ import {
   RulerIcon,
   DiaperIcon,
   FaceIcon,
+  ListIcon,
   MicIcon,
   MoonIcon,
   NoteIcon,
@@ -76,6 +78,9 @@ interface Props {
   onFullStats: () => void
   onGrowth: () => void
   onVaccines: () => void
+  onRoutines: () => void
+  /** The routine that starts next, and how many of its steps are ticked off today. */
+  nextRoutine?: Scheduled & { done: number }
   /** The most recent vaccination recorded, if any. */
   lastVaccine?: Extract<BabyEvent, { kind: 'vaccine' }>
   /** The latest weight, length and head size, read-only. */
@@ -258,6 +263,8 @@ export function Today(p: Props) {
       )}
 
       {p.on('aiInsights') && <InsightCards cards={p.insights} limit={2} onDismiss={p.onDismissInsight} />}
+
+      {p.on('routines') && <RoutineCard {...p} />}
 
       {p.sleepIssues.length > 0 && (
         <section className="card" role="alert" aria-label="Sleep log needs a look">
@@ -664,6 +671,31 @@ function ComingUp(p: Props) {
             Ask the coach
           </button>
         </div>
+      )}
+    </section>
+  )
+}
+
+function RoutineCard(p: Props) {
+  const next = p.nextRoutine
+  const today = next !== undefined && new Date(next.at).toDateString() === new Date(p.now).toDateString()
+  return (
+    <section className="card" aria-label="Routines">
+      <div className="card-head">
+        <h3>
+          <ListIcon width={18} height={18} /> Routines
+        </h3>
+        <button type="button" className="link" onClick={p.onRoutines}>
+          All routines <ChevronRightIcon width={16} height={16} />
+        </button>
+      </div>
+      {next ? (
+        <p className="muted small">
+          Next: <b>{next.routine.name}</b> {today ? 'at' : new Date(next.at).toLocaleDateString([], { weekday: 'long' })} {clock(next.at)}
+          {today && next.routine.steps.length > 0 ? `, ${next.done} of ${next.routine.steps.length} steps done` : ''}.
+        </p>
+      ) : (
+        <p className="muted small">No routines yet. Set up bedtime or a morning routine with steps to tick off.</p>
       )}
     </section>
   )
