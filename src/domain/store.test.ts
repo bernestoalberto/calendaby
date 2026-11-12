@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { SqlStatement, SqlValue } from '../db/driver'
 import { NodeSqlDriver } from '../db/node-driver.test-util'
 import { DEFAULT_LISTS } from './options'
 import { SEEDS, type Seed } from './seeds'
@@ -27,6 +28,43 @@ class MapStorage implements Storage {
 }
 
 describe('SqliteEventStore', () => {
+  it('opens a fresh database in a few round trips, not one per seed row', async () => {
+    // On the web every call opens the database file under a lock; one call per row kept a fresh install on "Opening…" for 20 seconds.
+    class Counting extends NodeSqlDriver {
+      calls = 0
+      private inBatch = false
+      override exec(sql: string, params?: SqlValue[]) {
+        if (!this.inBatch) this.calls++
+        return super.exec(sql, params)
+      }
+      override query<T extends Record<string, SqlValue>>(sql: string, params?: SqlValue[]) {
+        this.calls++
+        return super.query<T>(sql, params)
+      }
+      override async batch(statements: SqlStatement[]) {
+        this.calls++
+        this.inBatch = true
+        try {
+          await super.batch(statements)
+        } finally {
+          this.inBatch = false
+        }
+      }
+    }
+    const db = new Counting()
+    await SqliteEventStore.open(db)
+    expect(db.calls).toBeLessThan(60)
+    expect((await SqliteEventStore.open(db)).list()).toEqual([])
+  })
+
+  it('leaves no half-planted seed behind when a statement fails', async () => {
+    const db = new NodeSqlDriver()
+    const broken: Seed = { id: 'broken', since: Infinity, statements: ["INSERT INTO activity_types (id, label, sort) VALUES ('kite', 'Kite', 99)", 'INSERT INTO nowhere VALUES (1)'] }
+    await expect(SqliteEventStore.open(db, undefined, undefined, [...SEEDS, broken])).rejects.toThrow()
+    const store = await SqliteEventStore.open(db)
+    expect((await store.listActivityTypes()).map((t) => t.id)).not.toContain('kite')
+  })
+
   it('gives routines from the first routines version a state and no start date', async () => {
     const driver = new NodeSqlDriver()
     await SqliteEventStore.open(driver)

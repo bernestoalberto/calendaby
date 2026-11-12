@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { SqlDriver } from '../db/driver'
+import type { SqlDriver, SqlStatement } from '../db/driver'
 import { BabyEvent, type DraftEvent } from './events'
 import { activityId, type ActivityType } from './activities'
 import type { AgeNorm } from './ageNorms'
@@ -57,6 +57,11 @@ const UPSERT_REMOTE_EVENT_SQL = `INSERT OR REPLACE INTO events (id, kind, at, lo
 const DROP_REMOTE_PENDING_SQL = 'DELETE FROM sync_pending WHERE id IN (SELECT id FROM events WHERE remote = 1)'
 const DROP_REMOTE_EVENTS_SQL = 'DELETE FROM events WHERE remote = 1'
 
+// REPLACE gives the outbox row a new number, so a sync in flight will not clear a change made after it read.
+const QUEUE_SQL = 'INSERT OR REPLACE INTO sync_pending (id, op) VALUES (?, ?)'
+const DELETE_EVENT_SQL = 'DELETE FROM events WHERE id = ?'
+const LIST_PENDING_IDS_SQL = 'SELECT id FROM sync_pending'
+const MARK_SEED_SQL = 'INSERT OR IGNORE INTO seed_applied (id, applied_at) VALUES (?, ?)'
 const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
 const dropTableSql = (name: string) => `DROP TABLE IF EXISTS "${name.replaceAll('"', '""')}"`
 
@@ -311,9 +316,18 @@ export class SqliteEventStore implements EventStore {
   /** Runs the schema steps this phone has not had yet. Returns the version it started from. */
   private async migrate(): Promise<number> {
     const [{ user_version }] = await this.db.query<{ user_version: number }>('PRAGMA user_version')
-    for (let v = user_version + 1; v <= SCHEMA_VERSION; v++) {
-      for (const sql of MIGRATIONS[v]) await this.runStep(sql)
-      await this.db.exec(`PRAGMA user_version = ${v}`)
+    const steps: SqlStatement[] = []
+    for (let v = user_version + 1; v <= SCHEMA_VERSION; v++) steps.push(...MIGRATIONS[v].map((sql) => ({ sql })), { sql: `PRAGMA user_version = ${v}` })
+    if (steps.length === 0) return user_version
+    try {
+      await this.db.batch(steps)
+    } catch {
+      // Rolled back. Older versions ran the steps one by one, so a phone may hold a column its version number does not
+      // know about; the slow path below tolerates that.
+      for (let v = user_version + 1; v <= SCHEMA_VERSION; v++) {
+        for (const sql of MIGRATIONS[v]) await this.runStep(sql)
+        await this.db.exec(`PRAGMA user_version = ${v}`)
+      }
     }
     return user_version
   }
@@ -324,8 +338,9 @@ export class SqliteEventStore implements EventStore {
     for (const seed of seeds) {
       if (done.has(seed.id)) continue
       // A phone already past `since` got this data from the migrations that used to plant it; do not plant it again.
-      if (!(from > 0 && from >= seed.since)) for (const sql of seed.statements) await this.db.exec(sql)
-      await this.db.exec('INSERT OR IGNORE INTO seed_applied (id, applied_at) VALUES (?, ?)', [seed.id, Date.now()])
+      const rows = from > 0 && from >= seed.since ? [] : seed.statements.map((sql) => ({ sql }))
+      // One transaction per seed: fast on a fresh install, and a seed is never left half planted if the app closes.
+      await this.db.batch([...rows, { sql: MARK_SEED_SQL, params: [seed.id, Date.now()] }])
     }
   }
 
@@ -334,7 +349,7 @@ export class SqliteEventStore implements EventStore {
     if (!raw) return
     const parsed = z.array(BabyEvent).safeParse(JSON.parse(raw))
     if (parsed.success) {
-      for (const e of parsed.data) await this.insert(e, 'INSERT OR IGNORE')
+      await this.db.batch(parsed.data.flatMap((e) => this.insertSteps(e, 'INSERT OR IGNORE')))
     }
     // Keep a copy under another key rather than deleting the parent's only backup.
     storage.setItem(`${LEGACY_KEY}.migrated`, raw)
@@ -355,17 +370,12 @@ export class SqliteEventStore implements EventStore {
     })
   }
 
-  private async insert(e: BabyEvent, verb: 'INSERT' | 'INSERT OR IGNORE' = 'INSERT'): Promise<void> {
-    await this.db.exec(
-      `${verb} INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-      [e.id, e.kind, e.at, e.loggedBy, JSON.stringify(e), Date.now()],
-    )
-    await this.queue(e.id, 'put')
-  }
-
-  /** REPLACE gives the row a new number, so a sync in flight will not clear a change made after it read. */
-  private queue(id: string, op: 'put' | 'delete'): Promise<void> {
-    return this.db.exec('INSERT OR REPLACE INTO sync_pending (id, op) VALUES (?, ?)', [id, op])
+  /** Saving an event and queueing it for sync, as one transaction so neither is left without the other. */
+  private insertSteps(e: BabyEvent, verb: 'INSERT' | 'INSERT OR IGNORE'): SqlStatement[] {
+    return [
+      { sql: `${verb} INTO events (id, kind, at, logged_by, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`, params: [e.id, e.kind, e.at, e.loggedBy, JSON.stringify(e), Date.now()] },
+      { sql: QUEUE_SQL, params: [e.id, 'put'] },
+    ]
   }
 
   private async loadLists(): Promise<void> {
@@ -416,14 +426,16 @@ export class SqliteEventStore implements EventStore {
     const dup = findDuplicate(this.events, draft)
     if (dup) throw new DuplicateEventError(dup)
     const event = BabyEvent.parse({ ...draft, id: this.newId(), loggedBy })
-    await this.insert(event)
+    await this.db.batch(this.insertSteps(event, 'INSERT'))
     this.events = [...this.events, event].sort((a, b) => a.at - b.at)
     return event
   }
 
   async remove(id: string): Promise<void> {
-    await this.db.exec('DELETE FROM events WHERE id = ?', [id])
-    await this.queue(id, 'delete')
+    await this.db.batch([
+      { sql: DELETE_EVENT_SQL, params: [id] },
+      { sql: QUEUE_SQL, params: [id, 'delete'] },
+    ])
     this.events = this.events.filter((e) => e.id !== id)
   }
 
@@ -434,8 +446,10 @@ export class SqliteEventStore implements EventStore {
     const problem = vaccineProblem(draft, Date.now())
     if (problem) throw new Error(problem)
     const event = BabyEvent.parse({ ...draft, id, loggedBy: existing.loggedBy })
-    await this.db.exec('UPDATE events SET kind = ?, at = ?, body = ? WHERE id = ?', [event.kind, event.at, JSON.stringify(event), id])
-    await this.queue(id, 'put')
+    await this.db.batch([
+      { sql: 'UPDATE events SET kind = ?, at = ?, body = ? WHERE id = ?', params: [event.kind, event.at, JSON.stringify(event), id] },
+      { sql: QUEUE_SQL, params: [id, 'put'] },
+    ])
     this.events = this.events.map((e) => (e.id === id ? event : e)).sort((a, b) => a.at - b.at)
     return event
   }
@@ -468,20 +482,23 @@ export class SqliteEventStore implements EventStore {
    * and wins, as the later save. Nothing here is queued, or it would bounce back to the server.
    */
   async applyRemote(changes: RemoteChange[]): Promise<number> {
-    let applied = 0
-    for (const { event, deleted } of changes) {
-      const [waiting] = await this.db.query<{ n: number }>('SELECT n FROM sync_pending WHERE id = ?', [event.id])
-      if (waiting) continue
-      if (deleted) {
-        await this.db.exec('DELETE FROM events WHERE id = ?', [event.id])
-        this.events = this.events.filter((e) => e.id !== event.id)
-      } else {
-        await this.db.exec(UPSERT_REMOTE_EVENT_SQL, [event.id, event.kind, event.at, event.loggedBy, JSON.stringify(event), Date.now(), event.id])
-        this.events = [...this.events.filter((e) => e.id !== event.id), event].sort((a, b) => a.at - b.at)
-      }
-      applied++
+    const waiting = new Set((await this.db.query<{ id: string }>(LIST_PENDING_IDS_SQL)).map((r) => r.id))
+    const taken = changes.filter((c) => !waiting.has(c.event.id))
+    // One transaction for the whole page of changes: a first sync can bring hundreds of entries.
+    await this.db.batch(
+      taken.map(({ event, deleted }) =>
+        deleted
+          ? { sql: DELETE_EVENT_SQL, params: [event.id] }
+          : { sql: UPSERT_REMOTE_EVENT_SQL, params: [event.id, event.kind, event.at, event.loggedBy, JSON.stringify(event), Date.now(), event.id] },
+      ),
+    )
+    const byId = new Map(this.events.map((e) => [e.id, e]))
+    for (const { event, deleted } of taken) {
+      if (deleted) byId.delete(event.id)
+      else byId.set(event.id, event)
     }
-    return applied
+    this.events = [...byId.values()].sort((a, b) => a.at - b.at)
+    return taken.length
   }
 
   /** The household this phone last synced with and the last change number it saw there. */

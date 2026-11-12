@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule, { type SAHPoolUtil } from '@sqlite.org/sqlite-wasm'
-import type { SqlValue } from './driver'
+import type { SqlStatement, SqlValue } from './driver'
 
-type Request = { id: number; sql: string; params: SqlValue[]; rows: boolean }
+type Request = { id: number; sql: string; params: SqlValue[]; rows: boolean } | { id: number; batch: SqlStatement[] }
 
 interface Db {
   exec(opts: { sql: string; bind?: SqlValue[]; rowMode?: 'object'; returnValue?: 'resultRows' }): unknown
@@ -17,7 +17,19 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
   return navigator.locks.request('calendaby-db', fn)
 }
 
+/** One open and one lock for a whole batch: a fresh install plants thousands of seed rows, and opening per row took many seconds. */
 function exec(db: Db, msg: Request): unknown {
+  if ('batch' in msg) {
+    db.exec({ sql: 'BEGIN' })
+    try {
+      for (const s of msg.batch) db.exec({ sql: s.sql, bind: s.params ?? [] })
+      db.exec({ sql: 'COMMIT' })
+    } catch (err) {
+      db.exec({ sql: 'ROLLBACK' })
+      throw err
+    }
+    return null
+  }
   return msg.rows
     ? db.exec({ sql: msg.sql, bind: msg.params, rowMode: 'object', returnValue: 'resultRows' })
     : (db.exec({ sql: msg.sql, bind: msg.params }), null)

@@ -1,4 +1,4 @@
-import type { SqlDriver, SqlValue } from './driver'
+import type { SqlDriver, SqlStatement, SqlValue } from './driver'
 
 type Reply = { id: number; result?: unknown; error?: string }
 
@@ -35,6 +35,10 @@ export class WebSqlDriver implements SqlDriver {
 
   async exec(sql: string, params: SqlValue[] = []): Promise<void> {
     await this.send({ sql, params, rows: false })
+  }
+
+  async batch(statements: SqlStatement[]): Promise<void> {
+    await this.send({ batch: statements })
   }
 
   async query<T extends Record<string, SqlValue>>(sql: string, params: SqlValue[] = []): Promise<T[]> {
